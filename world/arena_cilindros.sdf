@@ -7,6 +7,7 @@
   <!-- Gerando o SDF:
         $ xacro arena_cilindros.sdf.xacro > arena_cilindros.sdf
      -->
+  <!-- yaw(rad): 0°=0, 45°=0.7854, 90°=1.5708, 135°=2.3562, 180°=3.1416, 225°=3.9270, 270°=4.7124, 315°=5.4978, 360°=6.2832 -->
   <world name="capture_the_flag_world">
     <plugin filename="ignition-gazebo-physics-system" name="ignition::gazebo::systems::Physics"/>
     <plugin filename="ignition-gazebo-user-commands-system" name="ignition::gazebo::systems::UserCommands"/>
@@ -132,7 +133,7 @@
         <label>20</label>
       </plugin>
       <link name="red_flag_link">
-        <pose>-8.0 0 0.2 0 0 1.5708</pose>
+        <pose>-8.0 0.5 0.2 0 0 1.57</pose>
         <!-- Mastro -->
         <visual name="pole_visual">
           <pose>0 0 0.2 0 0 0</pose>
@@ -217,7 +218,7 @@
         <label>25</label>
       </plugin>
       <link name="blue_flag_link">
-        <pose>8.0 0 0.2 0 0 1.5708</pose>
+        <pose>8.5 -3.5 0.2 0 0 1.57</pose>
         <!-- Mastro -->
         <visual name="pole_visual">
           <pose>0 0 0.2 0 0 0</pose>

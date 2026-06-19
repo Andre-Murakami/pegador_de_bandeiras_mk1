@@ -777,7 +777,7 @@
   </link>
   <joint name="gear_joint" type="revolute">
     <origin rpy="0 0 0" xyz="0 0 0"/>
-    <axis xyz="0 0 1"/>
+    <axis xyz="0 1 0"/>   
     <limit effort="500.0" lower="-1.57" upper="1.57" velocity="0.25"/>
     <dynamics damping="5.0" friction="1.0"/>
     <parent link="gripper_pole"/>
