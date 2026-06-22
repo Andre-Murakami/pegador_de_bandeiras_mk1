@@ -45,8 +45,8 @@
     <!-- x positivo = campo azul (esquerda na vista aérea)           -->
     <!-- y = posição lateral (0 = centro do campo)        6.5 e -1.05    8.2 e -3.3          -->
     <!-- ============================================================ -->
-    <xacro:property name="blue_flag_x" value="8.5"/>
-    <xacro:property name="blue_flag_y" value="-3.5"/>
+    <xacro:property name="blue_flag_x" value="7.0"/>
+    <xacro:property name="blue_flag_y" value="1.0"/>
     
     
     <xacro:property name="flag_pole_radius"  value="0.03"/>

@@ -788,7 +788,7 @@
     <link name="tale">
     <visual>
       <geometry>
-        <box size="${base_length/2} ${base_width*0.7} ${base_height/5}"/>
+        <box size="${base_length/10} ${base_width*0.7} ${base_height/5}"/>
       </geometry>
       <material name="brown">
         <color rgba="1.0 0.5 0 1.0"/>
@@ -807,7 +807,7 @@
   <joint name="tale_joint" type="fixed">
     <parent link="base_footprint"/>
     <child link="tale"/>
-    <origin xyz="-${base_length*0.7} 0.0 -${base_height}" rpy="0 0 0"/>
+    <origin xyz="-${base_length*0.5} 0.0 -${base_height}" rpy="0 0 0"/>
   </joint>
   
     <link name="left_eye">
