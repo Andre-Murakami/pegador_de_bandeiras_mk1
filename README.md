@@ -84,7 +84,7 @@ Arquivos para apresentação na feira de extensão:
 1. Acessar a pasta `src` do seu workspace ROS2 Humble e clonar o repositório:
     ```bash 
     cd ~/ros2_ws/src
-    git clone -b pegador_de_bandeiras_mk1 https://github.com/jp-lopes/pegador_de_bandeiras.git pegador_de_bandeiras_mk1
+    git clone -b pegador_de_bandeiras_mk1 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1/tree/pegador_de_bandeiras_mk1
     ```
 2. Instalar dependências com `rosdep`:
     ```bash 
@@ -121,7 +121,7 @@ Arquivos para apresentação na feira de extensão:
 1. Acessar a pasta `src` do seu workspace ROS2 Humble e clonar o repositório:
     ```bash 
     cd ~/ros2_ws/src
-    git clone -b pegador_de_bandeiras_mk1 https://github.com/jp-lopes/pegador_de_bandeiras.git pegador_de_bandeiras_mk1
+    git clone -b pegador_de_bandeiras_mk1 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1/tree/pegador_de_bandeiras_mk1
     ```
 2. Garantir permissões gráficas e iniciar container:
     ```bash 
