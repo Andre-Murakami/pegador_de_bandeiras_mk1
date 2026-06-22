@@ -14,6 +14,8 @@ Funcionalidades Implementadas
 - Manipulação Robótica Assíncrona: Controle não-bloqueante da garra para captura e liberação do mastro da bandeira.
 - Estratégias Avançadas de Evasão e Recuperação: Mitigação de oscilações, quinas e travamentos físicos.
 
+https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1/blob/pegador_de_bandeiras_mk1/Diagrama_de_estados.png
+
 Máquina de Estados (FSM)
 A inteligência de tomada de decisão é organizada sob uma FSM dividida em fases lógicas compartilhadas e específicas por ambiente:
 1. Inicialização e Classificação
