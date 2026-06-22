@@ -82,71 +82,84 @@ Arquivos para apresentação na feira de extensão:
 ## Instruções para execução localmente
 
 1. Acessar a pasta `src` do seu workspace ROS2 Humble e clonar o repositório:
-    ```bash 
+
     cd ~/ros2_ws/src
     git clone -b pegador_de_bandeiras_mk1 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1.git
-    ```
+
+
 2. Instalar dependências com `rosdep`:
-    ```bash 
+
     cd ~/ros2_ws
     sudo apt update
     sudo rosdep init        
     rosdep update
     rosdep install --from-paths src --ignore-src -r -y
-    ```
+
+
 3. Compilar o pacote:
-    ```bash 
+
     cd ~/ros2_ws
-    colcon build
-    ```
+    colcon build --packages-select 
+
+
 4. Iniciar a simulação do Gazebo:
-    ```bash 
+
     source install/setup.bash
     ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
-    ```
+
+
 5. Abrir mais dois terminais:
 - No primeiro, carregar o robô na simulação:
-    ```bash 
+
     cd ~/ros2_ws
     source install/setup.bash
     ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
-    ```
+
+
 - No segundo, iniciar o controle autonômo do robô:
-    ```bash 
+
     cd ~/ros2_ws
     source install/setup.bash
     ros2 run pegador_de_bandeiras_mk1 controle_robo
-    ```
+
+
+
 ## Instruções para execução com Docker
+
 1. Acessar a pasta `src` do seu workspace ROS2 Humble e clonar o repositório:
-    ```bash 
+
     cd ~/ros2_ws/src
     git clone -b pegador_de_bandeiras_mk1 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1.git
-    ```
+
+
 2. Garantir permissões gráficas e iniciar container:
-    ```bash 
-    cd pegador_de_bandeiras_mk1/docker
+   
+    cd ~/ros2_ws/src/pegador_de_bandeiras_mk1/docker
     xhost +local:root
     docker compose up -d
-    ```
+
+
 3. Entrar no container, compilar projeto e carregar variáveis:
-    ```bash 
+
     docker exec -it ros2_humble_env bash
     colcon build
     source ~/.bashrc
-    ```
-4. Iniciar simulação:
-    ```bash 
+
+
+4. Iniciar simulação do Gazebo (dentro do container):
+
     ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
-    ```
+
+
 5. Abrir mais dois terminais:
+   
 - No primeiro, carregar robô na simulação:
-    ```bash 
+
     docker exec -it ros2_humble_env bash
     ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
-    ```
+
 - No segundo, iniciar o controle autonômo do robô:
-    ```bash 
+
     docker exec -it ros2_humble_env bash
     ros2 run pegador_de_bandeiras_mk1 controle_robo
-    ```
+
