@@ -79,6 +79,135 @@ Arquivos para apresentação na feira de extensão:
 - João Pedro Lopes de Melo - nUSP 15588950 - [@jp-lopes](https://github.com/jp-lopes)
 
 
+
+
+
+
+## 🚀 Instruções para Execução Local
+
+### 1. Clonar o repositório
+
+Acesse a pasta `src` do workspace ROS 2 e clone o projeto:
+
+```bash
+cd ~/ros2_ws/src
+git clone -b pegador_de_bandeiras_mk1 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1.git
+```
+
+### 2. Instalar dependências
+
+```bash
+cd ~/ros2_ws
+sudo apt update
+sudo rosdep init
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y
+```
+
+### 3. Compilar o pacote
+
+```bash
+cd ~/ros2_ws
+colcon build --packages-select pegador_de_bandeiras_mk1
+```
+
+### 4. Iniciar a simulação
+
+```bash
+source install/setup.bash
+ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
+```
+
+### 5. Abrir mais dois terminais
+
+#### Terminal 1 — Carregar o robô
+
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
+```
+
+#### Terminal 2 — Iniciar o controle autônomo
+
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+ros2 run pegador_de_bandeiras_mk1 controle_robo
+```
+
+---
+
+# 🐳 Instruções para Execução com Docker
+
+### 1. Clonar o repositório
+
+```bash
+cd ~/ros2_ws/src
+git clone -b pegador_de_bandeiras_mk1 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1.git
+```
+
+### 2. Iniciar o container
+
+```bash
+cd ~/ros2_ws/src/pegador_de_bandeiras_mk1/docker
+
+xhost +local:root
+
+docker compose up -d
+```
+
+### 3. Entrar no container e compilar
+
+```bash
+docker exec -it ros2_humble_env bash
+
+colcon build
+
+source ~/.bashrc
+```
+
+### 4. Iniciar a simulação
+
+```bash
+ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
+```
+
+### 5. Abrir mais dois terminais
+
+#### Terminal 1 — Carregar o robô
+
+```bash
+docker exec -it ros2_humble_env bash
+
+ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
+```
+
+#### Terminal 2 — Iniciar o controle autônomo
+
+```bash
+docker exec -it ros2_humble_env bash
+
+ros2 run pegador_de_bandeiras_mk1 controle_robo
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Instruções para execução localmente
 
 1. Acessar a pasta `src` do seu workspace ROS2 Humble e clonar o repositório:
