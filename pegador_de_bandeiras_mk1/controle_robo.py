@@ -56,7 +56,7 @@ class ControleRobo(Node):
         super().__init__('controle_robo')
         
         # Linha adicionada para indicar a versão no terminal
-        self.get_logger().info("--- VERSAO 000121 ---")
+        self.get_logger().info("--- VERSAO 000174 ---")
 
         # === CRONÔMETRO DA MISSÃO ===
         self.tempo_inicio_missao = time.time()
@@ -101,20 +101,20 @@ class ControleRobo(Node):
         self.direcao_aleatoria = random.choice([Direcoes.DIREITA.value, Direcoes.ESQUERDA.value])
         self.direcao_bandeira = -1
         # Distância de detecção de obstáculos
-        self.distancia_max_obstaculo_frente = 0.61
-        self.distancia_max_obstaculo_lados = 0.27
+        self.distancia_max_obstaculo_frente = 0.61  # cada arena tem uma parametro diferente veja na linha 792 e 804
+        self.distancia_max_obstaculo_lados = 0.30
         
         # Variável exclusiva para controle de velocidade (não afeta o desvio)
-        self.distancia_limite_velocidade = 1.5
+        self.distancia_limite_velocidade = 1.5  # 1.5 original
 
         # Distância (via LIDAR frontal) usada para o ajuste fino de distância já existente
         # dentro de POSICIONANDO_PARA_COLETA, antes de aferir a extensão da garra
-        self.distancia_alvo_bandeira = 0.67  #key
+        self.distancia_alvo_bandeira = 0.668  #key
 
         # Porcentagem da bandeira na câmera para considerar que ela foi "alcançada" e iniciar
         # a centralização da garra (saída de NAVEGANDO_PARA_BANDEIRA). AJUSTE FINO: altere o
         # valor abaixo para calibrar a distância em que a centralização da garra é iniciada.
-        self.porcentagem_alvo_bandeira_coleta = 4.1  #key ANDRE
+        self.porcentagem_alvo_bandeira_coleta = 2.5  #key ANDRE ATENCAO MUDE TAMBÉM NAS LINHAS 792 e 804 (o valor é personalizado por arena)
 
         # Range de detecção de obstáculos à frente (-30° a +30°)
         self.indices_frente_esquerda = list(range(0, 31))
@@ -124,8 +124,8 @@ class ControleRobo(Node):
         self._indices_frente_direita_orig = list(self.indices_frente_direita)
         # Zona cega frontal estreita usada no RETORNANDO_PARA_BASE para ignorar o mastro
         # capturado: descarta -15° a +15° (índices 0-15 e 345-360), mantendo apenas 16-24 e 335-344
-        self._indices_frente_esquerda_retorno = list(range(6, 25))  # 6, 25
-        self._indices_frente_direita_retorno = list(range(335, 354))  # 335, 354
+        self._indices_frente_esquerda_retorno = list(range(12, 25))  # 6, 25
+        self._indices_frente_direita_retorno = list(range(335, 348))  # 335, 354
         self._zona_cega_mastro_ativa = False
         # Range de detecção de obstáculos à esquerda (30° a 90°)
         self.indices_esquerda = list(range(30, 90))
@@ -252,9 +252,17 @@ class ControleRobo(Node):
         self.subfase_inicial_retorno = 0
         self.tempo_inicio_subfase_retorno = 0.0
         self.duracao_pausa_retorno = 1.7  #key
+
         self.x_ini_avanco_inicial_retorno = 0.0
         self.y_ini_avanco_inicial_retorno = 0.0
-        self.distancia_avanco_inicial_retorno = 0.57  #key
+        # === Variáveis para avanço por TEMPO após captura ===
+        #self.distancia_avanco_inicial_retorno = 0.57  #key
+        self.tempo_inicio_avanco_inicial_retorno = 0.0
+        self.duracao_avanco_inicial_retorno = 7.1   # ← Mude aqui o tempo em segundos
+        self.duracao_giro_inicial_retorno = 17.7   # 12.7 ok key (giro para retorno - Arena cilindros
+        self.tempo_inicio_re_osc4 = 0.0  # anti travamento em esquina
+        self.fase_osc4 = None            # anti travamento em esquina
+        
         self.yaw_ini_giro_inicial_retorno = 0.0
         self.direcao_giro_inicial_retorno = 1
         self._indices_esquerda_orig_retorno = []
@@ -265,6 +273,9 @@ class ControleRobo(Node):
         self.x_ini_avanco_deposito = 0.0
         self.y_ini_avanco_deposito = 0.0
         self.distancia_avanco_deposito = 0.51  #key
+        self.tempo_max_avanco_deposito = 4.15   #key tempo máximo de avanço para depósito (s)
+        self.tempo_inicio_avanco_deposito = 0.0
+        
 
         # Avanço reduzido usado quando a centralização com a base é cancelada por 4 desvios de
         # obstáculo consecutivos: a bandeira é depositada com o robô avançando somente 0.11m
@@ -324,9 +335,10 @@ class ControleRobo(Node):
         # A detecção de parede é reabilitada após self.tempo_reabilitar_parede_dentro_solo_azul
         # segundos depois de o robô confirmar que adentrou a área de solo azul.
         self.tempo_suprimir_parede_rumo_solo_azul = 6.1     #key # parametro: tempo_suprimir_parede_rumo_solo_azul
-        self.tempo_reabilitar_parede_dentro_solo_azul = 3.1 #key # parametro: tempo_reabilitar_parede_dentro_solo_azul
+        self.tempo_reabilitar_parede_dentro_solo_azul = 6.1 #key # parametro: tempo_reabilitar_parede_dentro_solo_azul
         self.tempo_inicio_navegando_para_solo_azul = 0.0    # cronômetro armado ao entrar em NAVEGANDO_PARA_AREA_SOLO_AZUL
         self.tempo_inicio_dentro_solo_azul = 0.0            # cronômetro armado ao entrar em PERMANECENDO_AREA_SOLO_AZUL
+        self.protocolo_solo_azul_executado = False  # True após fases 1/2/3 concluídas; impede repetição
         # Contador de ciclos consecutivos em que area_solo_azul_a_frente foi False durante a
         # navegação para a área. Só desiste e volta a EXPLORANDO quando esse contador atingir
         # ap_frames_perda_solo_azul ciclos seguidos sem ver a área — evita que um único frame
@@ -350,14 +362,14 @@ class ControleRobo(Node):
 
         # Faixa de correção fina de distância (via LiDAR lateral) mantida durante o seguimento
         # tangencial à parede: dentro desta faixa o robô segue em frente sem corrigir o ângulo
-        self.distancia_minima_seguindo_parede = 0.60  #key # parametro: distancia_minima_seguindo_parede
-        self.distancia_maxima_seguindo_parede = 0.67  #key # parametro: distancia_maxima_seguindo_parede
+        self.distancia_minima_seguindo_parede = 0.57  #key # original 0.6 parametro: distancia_minima_seguindo_parede
+        self.distancia_maxima_seguindo_parede = 0.67  #key # original 0.67parametro: distancia_maxima_seguindo_parede
         # Faixa de histerese (via LiDAR lateral), mais larga que a faixa de correção acima, usada
         # para considerar que o robô AINDA está tangenciando a MESMA parede mesmo que tenha se
         # afastado/aproximado um pouco mais. Enquanto a leitura permanecer dentro desta faixa, o
         # robô não procura/migra para outra parede. Assim que a leitura sair desta faixa (abaixo
         # do mínimo ou acima do máximo), considera-se que o contato com a parede foi perdido.
-        self.distancia_minima_contato_parede = 0.4  #key # parametro: distancia_minima_contato_parede
+        self.distancia_minima_contato_parede = 0.15  #key # parametro: distancia_minima_contato_parede orig 0.4
         self.distancia_maxima_contato_parede = 1.1  #key # parametro: distancia_maxima_contato_parede
 
         # Fator de redução da velocidade linear aplicado durante o seguimento tangencial à
@@ -380,7 +392,7 @@ class ControleRobo(Node):
 
         # Avanço fixo (em linha reta) executado logo após o giro de 90° em busca de nova
         # parede, antes de retomar a procura "oficial" (reaproveitando o script de aproximação)
-        self.distancia_avanco_fixo_nova_parede = 0.77  #key # parametro: distancia_avanco_fixo_nova_parede
+        self.distancia_avanco_fixo_nova_parede = 0.60  #key # original : 0.55 0.77 parametro:ss distancia_avanco_fixo_nova_parede
         self.x_ini_avanco_fixo_nova_parede = 0.0
         self.y_ini_avanco_fixo_nova_parede = 0.0
         # Controla o ciclo do protocolo Giro+Avanço: 0 = 1º ciclo (55° + 0.5m),
@@ -390,7 +402,7 @@ class ControleRobo(Node):
         # Avanço em linha reta de 0.8s ANTES do giro pós-parede (AP_AVANCO_PRE_GIRO_NOVA_PAREDE).
         # Inserido entre o momento em que o sensor lateral perde a parede e o início do giro,
         # para que o robô avance um pouco além da quina antes de virar.
-        self.ap_duracao_avanco_pre_giro = 1.8   #key # parametro: ap_duracao_avanco_pre_giro (segundos)
+        self.ap_duracao_avanco_pre_giro = 1.4   #key # original 1.8 parametro: ap_duracao_avanco_pre_giro (segundos)
         self.ap_tempo_ini_avanco_pre_giro = 0.0
 
         # Retorno por odometria (Arena Paredes): coordenadas do ponto de nascimento (start_x/start_y
@@ -400,6 +412,45 @@ class ControleRobo(Node):
         # de centralização e depósito da bandeira na base, igual à Arena Cilindros).
         self.ap_raio_chegada_retorno = 1.5   #key # parametro: ap_raio_chegada_retorno (metros — distância do start para considerar "chegou")
         self.ap_retorno_odometria_ativo = False  # ativado ao entrar em AP_RETORNO_ODOMETRIA
+        
+        
+        # Variáveis do critério de paralelismo por simetria LiDAR (GIRANDO_PARALELO_PAREDE)
+        self.gpp_angulo_a  = 60   # primeiro ângulo simétrico (calculado ao entrar no giro)
+        self.gpp_angulo_b  = 120  # segundo ângulo simétrico
+        self.gpp_margem    = 0.05  #key  margem relativa de simetria para parar o giro (5% = 0.05)
+        self.gpp_offset    = 30    #key  graus de offset ao redor do lado detectado (90±30 ou 270±30)
+        self.ultimo_scan_ranges = []
+        self.gpp_timeout = 4.5  #key original 4.5tempo máximo do giro paralelo (s)
+        self.gpp_tempo_inicio = 0.0
+        self.tempo_entrada_regiao_base_retorno = 0.0  # momento que entrou na região base no retorno
+        self.ja_entrou_regiao_base = False   # True permanente após adentrar a região da base no retorno; evita que oscilação da câmera jogue o robô de volta à busca da área base
+        self.tempo_delay_parede_regiao_base = 15.1  # original 11.1 key segundos após adentrar a região antes de ativar detecção de parede
+        
+        
+        self.raio_circulo_deteccao_parede = 120  #key original 80 raio em pixels do círculo central de detecção da parede foco
+        # Variável para salvar estado anterior quando detecta a base durante tangenciamento
+        self.estado_salvo_pre_base = None
+        
+        #Anti-tombamento do robô
+        self.inclinacao_z = 0.0          # inclinação atual em graus
+        self.limiar_tombamento = 10.3     #key graus de inclinação para acionar antitombamento
+        self.antitombamento_ativo = False
+        
+        # Timers de segurança para giro e avanço (redundância se odometria falhar)
+        self.t_ini_giro_nova_parede = 0.0
+        self.t_ini_avanco_fixo_nova_parede = 0.0
+        self.timeout_giro_nova_parede = 4.4   #key tempo máximo de giro (s)
+        self.timeout_avanco_fixo_nova_parede = 5.2  #key tempo máximo de avanço (s)
+        
+        self.tempo_linha_reta_solo_azul = 9.0   #key segundos em linha reta após entrar na área azul
+        self.tempo_giro_solo_azul = 7.7          #key segundos de giro para direita após linha reta
+        self.tempo_linha_reta2_solo_azul = 1.9  #key segundos em linha reta após o giro
+        
+        # Desobstrução do lidar causado pela bandeira
+        self.t_ini_desvio_obstaculo = 0.0
+        self.timeout_desvio_obstaculo = 30.0  #key segundos máximos no desvio antes de acionar garra
+        self.desvio_garra_acionado = False
+        
 
     def obstaculo_frente_oposto_parede(self):
         """Durante o seguimento tangencial da parede (Arena Paredes), o sensor frontal do MESMO
@@ -429,7 +480,7 @@ class ControleRobo(Node):
                 caminho_livre = False
                 break
         
-        return 1.4 if caminho_livre else 0.5
+        return 1.25 if caminho_livre else 0.5 # original 1.4
 
     def scan_callback(self, msg: LaserScan):
         num_ranges = len(msg.ranges)
@@ -452,11 +503,91 @@ class ControleRobo(Node):
 
         self.distancias_atras = [msg.ranges[i] for i in self.indices_atras]
         self.obstaculo_atras = self.distancias_atras and min(self.distancias_atras) < self.distancia_max_obstaculo_tras
-
-
+        self.dist_90  = msg.ranges[90]
+        self.dist_270 = msg.ranges[270]
+        
+        self.ultimo_scan_ranges = list(msg.ranges)   # vetor bruto para leitura de ângulos arbitrários
+        self.parede_alvo_retorno = False  # True somente durante o retorno à base (Arena Paredes)
+    
+    #para anti-tombamento do robo
+    #para anti-tombamento do robo
     def imu_callback(self, msg: Imu):
-        return
+        q = msg.orientation
+        rot = R.from_quat([q.x, q.y, q.z, q.w])
+        roll, pitch, yaw = rot.as_euler('xyz', degrees=True)
+        self.inclinacao_z = abs(pitch)
+        if self.inclinacao_z > self.limiar_tombamento and not self.antitombamento_ativo:
+            self.get_logger().warn(f"[IMU] Tombamento detectado! Inclinação: {self.inclinacao_z:.1f}°. Aferindo lado mais próximo...")
+            self.antitombamento_ativo = True
+            # Salva o estado atual para retomar após a manobra, com filtro por arena
+            _estado_salvo_antitomb = self.estado_atual
 
+            # Afere qual lado lateral está com obstáculo mais próximo (média das leituras do lado)
+            # Usa as mesmas listas já preenchidas pelo scan_callback: distancias_esquerda e distancias_direita
+            leit_esq = [d for d in self.distancias_esquerda if np.isfinite(d) and d > 0.05]
+            leit_dir = [d for d in self.distancias_direita if np.isfinite(d) and d > 0.05]
+            media_esq = sum(leit_esq) / len(leit_esq) if leit_esq else 999.0  # média das leituras laterais esquerdas
+            media_dir = sum(leit_dir) / len(leit_dir) if leit_dir else 999.0  # média das leituras laterais direitas
+            self.get_logger().warn(f"[IMU] Média lateral ESQ={media_esq:.2f}m  DIR={media_dir:.2f}m")
+
+            # Obstáculo mais próximo à esquerda → gira para a DIREITA (angular.z negativo)
+            # Obstáculo mais próximo à direita  → gira para a ESQUERDA (angular.z positivo)
+            if media_esq <= media_dir:
+                direcao_giro_anti = -1  # esquerda mais próxima → gira direita
+                self.get_logger().warn("[IMU] Lado mais próximo: ESQUERDA. Girará para a DIREITA após a ré.")
+            else:
+                direcao_giro_anti = 1   # direita mais próxima → gira esquerda
+                self.get_logger().warn("[IMU] Lado mais próximo: DIREITA. Girará para a ESQUERDA após a ré.")
+
+            # Ré por 3.8s ou 0.4m, o que vier primeiro
+            msg_re = Twist()
+            msg_re.linear.x = -0.25  #key velocidade da ré antitombamento (m/s)
+            x_ini = self.current_x
+            y_ini = self.current_y
+            t_ini = time.time()
+            while True:
+                self.cmd_vel_pub.publish(msg_re)
+                dist = np.hypot(self.current_x - x_ini, self.current_y - y_ini)
+                if dist >= 0.4 or (time.time() - t_ini) >= 3.8:  #key 0.4m ou 3.8s
+                    break
+                time.sleep(0.05)
+            msg_re.linear.x = 0.0
+            self.cmd_vel_pub.publish(msg_re)
+
+            # Giro para o lado OPOSTO ao obstáculo mais próximo, por 10s ou 100°
+            msg_giro = Twist()
+            msg_giro.angular.z = 0.5 * direcao_giro_anti  #key velocidade angular antitombamento (rad/s)
+            angulo_alvo = np.radians(100.0)  #key ângulo alvo do giro (graus)
+            yaw_ini = self.current_yaw
+            t_ini = time.time()
+            while True:
+                self.cmd_vel_pub.publish(msg_giro)
+                delta = abs(np.arctan2(
+                    np.sin(self.current_yaw - yaw_ini),
+                    np.cos(self.current_yaw - yaw_ini)
+                ))
+                if delta >= angulo_alvo or (time.time() - t_ini) >= 10.0:  #key 100° ou 10s
+                    break
+                time.sleep(0.05)
+            msg_giro.angular.z = 0.0
+            self.cmd_vel_pub.publish(msg_giro)
+
+            # Estados exclusivos da Arena Paredes — não fazem sentido na Arena Cilindros
+            _estados_exclusivos_paredes = {
+                Estados.APROXIMANDO_PAREDE,
+                Estados.GIRANDO_PARALELO_PAREDE,
+                Estados.SEGUINDO_PAREDE,
+                Estados.AP_AVANCO_PRE_GIRO_NOVA_PAREDE,
+                Estados.GIRANDO_90_NOVA_PAREDE,
+                Estados.AVANCANDO_FIXO_NOVA_PAREDE,
+            }
+            if self.arena_identificada == 'CILINDROS' and _estado_salvo_antitomb in _estados_exclusivos_paredes:
+                self.estado_atual = Estados.EXPLORANDO
+                self.get_logger().info(f"[IMU] Arena Cilindros: estado {_estado_salvo_antitomb.name} inválido pós-tombamento. Retomando EXPLORANDO.")
+            else:
+                self.estado_atual = _estado_salvo_antitomb
+                self.get_logger().info(f"[IMU] Manobra antitombamento concluída. Retomando {_estado_salvo_antitomb.name}.")
+            self.antitombamento_ativo = False
 
     def odom_callback(self, msg: Odometry):
         self.current_x = msg.pose.pose.position.x
@@ -555,15 +686,29 @@ class ControleRobo(Node):
 
         # Detecção da parede (Arena Paredes) - BGR=(171, 242, 0), informado via debug da câmera
         # (equivalente a RGB=(0, 242, 171))
+        # Detecção da parede foco (Arena Paredes) - BGR=(171, 242, 0)
+        # VERIFICAÇÃO EM REGIÃO CIRCULAR CENTRAL: só considera parede_a_frente=True se a cor
+        # verde estiver dentro de um círculo no centro da câmera. Isso evita falsos positivos
+        # quando a parede verde aparece na periferia da imagem enquanto o robô está de frente
+        # para uma parede de outra cor.
         cor_parede = np.array([171, 242, 0])
-        mask_parede = cv2.inRange(frame, cor_parede, cor_parede)
-        contours_parede, _ = cv2.findContours(mask_parede, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        mask_parede_total = cv2.inRange(frame, cor_parede, cor_parede)
+
+        # Cria máscara do círculo central (só pixels dentro do raio)
+        mask_circulo = np.zeros((h, w), dtype=np.uint8)
+        cx_cam = w // 2
+        cy_cam = h // 2
+        cv2.circle(mask_circulo, (cx_cam, cy_cam), self.raio_circulo_deteccao_parede, 255, -1)
+
+        # Aplica o círculo: só conta pixels da cor verde QUE estejam dentro do círculo central
+        mask_parede_centro = cv2.bitwise_and(mask_parede_total, mask_circulo)
+        contours_parede, _ = cv2.findContours(mask_parede_centro, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         self.parede_a_frente = len(contours_parede) > 0
-        # Percentual calculado sobre o TOTAL de pixels da cor na imagem (e não apenas o maior
-        # contorno), pois é esse o critério usado para identificar a Arena Paredes (a cor deve
-        # ocupar 30% do "volume" da câmera)
-        pixels_parede = cv2.countNonZero(mask_parede)
+
+        # Porcentagem continua sendo calculada sobre o frame todo (usada para identificar a arena)
+        pixels_parede = cv2.countNonZero(mask_parede_total)
         self.porcentagem_parede_na_camera = (pixels_parede / area_total) * 100.0
+
         if self.parede_a_frente:
             cnt_p = max(contours_parede, key=cv2.contourArea)
             M_p = cv2.moments(cnt_p)
@@ -588,7 +733,7 @@ class ControleRobo(Node):
 
     def retrair_garra(self, bloqueante=True):
         msg = Float64MultiArray()
-        self.extensão_garra = 0.02
+        self.extensão_garra = 0.055  #original 0.04
         msg.data = [self.extensão_garra, self.junta_garra_direita, self.junta_garra_esquerda, self.junta_dedo_esquerdo, self.junta_dedo_direito, self.rotacao]
         self.gripper_pub.publish(msg)
         if bloqueante:
@@ -618,7 +763,7 @@ class ControleRobo(Node):
 
     def rotacionar_garra(self, bloqueante=True):
         msg = Float64MultiArray()
-        self.rotacao = -0.19
+        self.rotacao = -0.15   # -0.1 não trava no degrau
         msg.data = [self.extensão_garra, self.junta_garra_direita, self.junta_garra_esquerda, self.junta_dedo_esquerdo, self.junta_dedo_direito, self.rotacao]
         self.gripper_pub.publish(msg)
         if bloqueante:
@@ -626,7 +771,7 @@ class ControleRobo(Node):
 
     def resetar_rotacao_garra(self):
         msg = Float64MultiArray()
-        self.rotacao = 0.0
+        self.rotacao = 0.0    
         msg.data = [self.extensão_garra, self.junta_garra_direita, self.junta_garra_esquerda, self.junta_dedo_esquerdo, self.junta_dedo_direito, self.rotacao]
         self.gripper_pub.publish(msg)
         time.sleep(4) 
@@ -641,6 +786,8 @@ class ControleRobo(Node):
         dx = 15
         base_vel_angular = 0.3
         base_vel_linear = self.calcular_velocidade_dinamica()
+
+        
         bandeira_centralizada = self.pos_x_bandeira_camera <= self.centro_x_camera + dx and self.pos_x_bandeira_camera >= self.centro_x_camera - dx
         self.direcao_bandeira = 1 if (self.pos_x_bandeira_camera < self.centro_x_camera - dx) else -1
 
@@ -656,18 +803,29 @@ class ControleRobo(Node):
                 pass
             elif self.porcentagem_parede_na_camera >= self.limiar_identificacao_arena_paredes:
                 self.arena_identificada = 'PAREDES'
+                self.porcentagem_alvo_bandeira_coleta = 2.5  #key ANDRE — Arena Paredes  
+                self.distancia_max_obstaculo_frente = 0.61   #key — Arena Paredes  
                 self.get_logger().info(f"=== ARENA IDENTIFICADA: PAREDES (parede ocupando {self.porcentagem_parede_na_camera:.1f}% da câmera) ===")
+                # Giro inicial de 7.7° para a direita antes de aproximar a parede
+                msg_giro = Twist()
+                msg_giro.angular.z = -base_vel_angular * 2.1  #key velocidade do giro inicial
+                self.cmd_vel_pub.publish(msg_giro)
+                time.sleep(1.0)  #key tempo de giro para atingir 7.7° (ajuste se necessário)
+                msg_giro.angular.z = 0.0
+                self.cmd_vel_pub.publish(msg_giro)
                 self.estado_atual = Estados.APROXIMANDO_PAREDE
             else:
                 self.arena_identificada = 'CILINDROS'
-                self.get_logger().info(f"=== ARENA IDENTIFICADA: CILINDROS (parede ocupando apenas {self.porcentagem_parede_na_camera:.1f}% da câmera) ===")
+                self.porcentagem_alvo_bandeira_coleta = 3.7  #key 4.1 ANDRE — Arena Cilindros  
+                self.distancia_max_obstaculo_frente = 0.63   #key — Arena Cilindros  
+                self.get_logger().info(f"=== ARENA IDENTIFICADA: CILINDROS (Cilindros ocupando apenas {self.porcentagem_parede_na_camera:.1f}% da câmera) ===")
                 self.estado_atual = Estados.EXPLORANDO
 
         elif self.estado_atual == Estados.EXPLORANDO:
-            if self.bandeira_a_frente:
+            if self.bandeira_a_frente and not self.bandeira_capturada:
                 self.get_logger().info("Bandeira detectada! Iniciando navegação em direção à bandeira.")
                 self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
-            elif self.area_solo_azul_a_frente:
+            elif self.area_solo_azul_a_frente and self.arena_identificada == 'PAREDES':
                 self.get_logger().info(">>> ÁREA DE SOLO AZUL DETECTADA durante exploração! Navegando imediatamente para a área de solo azul. <<<")
                 self.tempo_inicio_navegando_para_solo_azul = time.time()
                 self.parede_suprimida_rumo_solo_azul = False
@@ -681,6 +839,23 @@ class ControleRobo(Node):
                 twist.linear.x = base_vel_linear
 
         elif self.estado_atual == Estados.DESVIANDO_DE_OBSTACULO:
+            if self.t_ini_desvio_obstaculo == 0.0:
+                self.t_ini_desvio_obstaculo = time.time()
+                self.desvio_garra_acionado = False
+
+            # Trava de 8s: abre garra, rotaciona, fecha, rotaciona de volta
+            if (not self.desvio_garra_acionado
+                    and time.time() - self.t_ini_desvio_obstaculo >= self.timeout_desvio_obstaculo):
+                self.get_logger().info("[DESVIO] 8s sem sair! Acionando garra para desobstruir LiDAR.")
+                self.desvio_garra_acionado = True
+                self.abrir_garra(bloqueante=True)
+                self.rotacao = 0.0
+                self.rotacionar_garra(bloqueante=True)
+                self.fechar_garra(bloqueante=True)
+                self.rotacao = -1.2
+                self.rotacionar_garra(bloqueante=True)
+                self.get_logger().info("[DESVIO] Garra acionada. Retomando desvio.")
+
             if self.estado_origem_desvio == Estados.RETORNANDO_PARA_BASE:
                 leituras_filtradas_esq = [r for r in self.distancias_frente_esquerda if r > 0.40]
                 leituras_filtradas_dir = [r for r in self.distancias_frente_direita if r > 0.40]
@@ -721,15 +896,28 @@ class ControleRobo(Node):
                 if self.direcao_desvio_anterior is not None and self.direcao_desvio != self.direcao_desvio_anterior:
                     self.contador_oscilacao += 1
                 self.direcao_desvio_anterior = self.direcao_desvio
-
-                if self.contador_oscilacao == 4:
+                
+                
+                if self.contador_oscilacao == 3:
                     self.distancia_max_obstaculo_frente = max(
                         self.distancia_max_obstaculo_frente - self.decremento_distancia_obstaculo_frente,
                         self.distancia_minima_obstaculo_frente
                     )
-                    self.get_logger().info(f"4 oscilações detectadas! Reduzindo distância de detecção frontal do LIDAR para {self.distancia_max_obstaculo_frente:.3f}m.")
+                    self.get_logger().info(f"3 oscilações detectadas! Manobrando na esquina")
+                    self.contador_oscilacao = 0
+                    self.direcao_desvio_anterior = None
+                    self.tempo_inicio_re_osc4 = time.time()
+                    self.fase_osc4 = 're'
+                    self.estado_atual = Estados.DESVIANDO_DE_OBSTACULO_2
 
-                if self.contador_oscilacao >= 5:
+                """if self.contador_oscilacao == 4:
+                    self.distancia_max_obstaculo_frente = max(
+                        self.distancia_max_obstaculo_frente - self.decremento_distancia_obstaculo_frente,
+                        self.distancia_minima_obstaculo_frente
+                    )
+                    self.get_logger().info(f"4 oscilações detectadas! Reduzindo distância de detecção frontal do LIDAR para {self.distancia_max_obstaculo_frente:.3f}m.")"""
+
+                if self.contador_oscilacao >= 4:
                     self.get_logger().info("Oscilação no desvio de obstáculo detectada! Iniciando manobra de ré.")
                     self.contador_oscilacao = 0
                     self.direcao_desvio_anterior = None
@@ -754,69 +942,52 @@ class ControleRobo(Node):
 
             else:
                 self.direcao_aleatoria = random.choice([Direcoes.DIREITA.value, Direcoes.ESQUERDA.value])
-                self.estado_atual = self.estado_origem_desvio
+                # Quando o desvio veio de SEGUINDO_PAREDE, não retoma o tangenciamento:
+                # restaura a hierarquia que estava ativa ANTES de encontrar a parede.
+                # - Na volta (bandeira_capturada): RETORNANDO_PARA_BASE gerencia toda a
+                #   hierarquia de retorno (Base > Área Base > Parede, ou Base > Parede
+                #   se ja_entrou_regiao_base=True).
+                # - Na ida: APROXIMANDO_PAREDE reavalia Bandeira > Solo Azul > Parede.
+                # Todos os outros estados de origem (NAVEGANDO_PARA_BANDEIRA,
+                # RETORNANDO_PARA_BASE, etc.) continuam retornando normalmente.
+                if self.estado_origem_desvio == Estados.SEGUINDO_PAREDE:
+                    # SEGUINDO_PAREDE só é ativo na Arena Paredes — esta condição nunca
+                    # é atingida na Arena Cilindros. A guarda de arena aqui é uma salvaguarda.
+                    if self.bandeira_capturada and self.arena_identificada == 'PAREDES':
+                        self.get_logger().info("[DESVIO] Desvio concluído. Retomando hierarquia de retorno (Base > Área Base > Parede).")
+                        self.estado_atual = Estados.RETORNANDO_PARA_BASE
+                    else:
+                        self.get_logger().info("[DESVIO] Desvio concluído. Retomando hierarquia de ida (Bandeira > Solo > Parede).")
+                        self.estado_atual = Estados.APROXIMANDO_PAREDE
+                else:
+                    self.estado_atual = self.estado_origem_desvio
+                    self.t_ini_desvio_obstaculo = 0.0
 
         elif self.estado_atual == Estados.DESVIANDO_DE_OBSTACULO_2:
-            # Nova lógica alternada de ré conforme solicitado pelo usuário
-            if self.obstaculo_atras or self.obstaculo_a_esquerda or self.obstaculo_a_direita:
-                twist.linear.x = 0.0
-                twist.angular.z = 0.0
-                self.get_logger().info("Obstáculo detectado (traseiro ou lateral) durante a ré! Suspendendo manobra e retornando ao estado anterior.")
-                self.estado_atual = self.estado_origem_desvio
-                self.contador_micro_desloc = 0
-                self.re_pre_giro_iniciada = False
-                self.re_pre_giro_concluida = False
-            else:
-                if self.tipo_re_atual == 1:
-                    # Tipo 1: Ré de 0.33m seguida de giro puro no próprio eixo (100 graus no sentido oposto)
-                    if not self.re_pre_giro_concluida:
-                        if not self.re_pre_giro_iniciada:
-                            self.x_ini_re_pre_giro = self.current_x
-                            self.y_ini_re_pre_giro = self.current_y
-                            self.re_pre_giro_iniciada = True
-                            self.get_logger().info("Iniciando ré de 0.33m antes do giro...")
-                        distancia_re_pre_giro_percorrida = np.hypot(self.current_x - self.x_ini_re_pre_giro, self.current_y - self.y_ini_re_pre_giro)
-                        if distancia_re_pre_giro_percorrida < self.distancia_re_pre_giro:
-                            twist.linear.x = -0.25
-                            twist.angular.z = 0.0
-                        else:
-                            twist.linear.x = 0.0
-                            twist.angular.z = 0.0
-                            self.get_logger().info("Ré de 0.33m concluída. Iniciando giro de 100°...")
-                            self.re_pre_giro_concluida = True
+        
+            # Anti travamento - oscilação eterna na esquina
+            if self.fase_osc4 in ('re', 'giro'):
+                agora = time.time()
+                if self.fase_osc4 == 're':
+                    if agora - self.tempo_inicio_re_osc4 < 0.7: #key tempo de ré quando oscila 3 vezes
+                        twist.linear.x = -0.25
                     else:
-                        yaw_delta = np.arctan2(np.sin(self.current_yaw - self.yaw_ini_desvio2), np.cos(self.current_yaw - self.yaw_ini_desvio2))
-                        if abs(yaw_delta) < np.radians(100):
-                            twist.linear.x = 0.0
-                            twist.angular.z = base_vel_angular * 1.6 * (-self.direcao_desvio)  # sentido oposto
-                        else:
-                            twist.linear.x = 0.0
-                            twist.angular.z = 0.0
-                            self.get_logger().info("Giro no próprio eixo de 100° concluído.")
-                            self.estado_atual = self.estado_origem_desvio
-                            self.tipo_re_atual = 2  # alterna para micro deslocamentos
-                            self.re_pre_giro_iniciada = False
-                            self.re_pre_giro_concluida = False
-
+                        self.fase_osc4 = 'giro'
+                        self.tempo_inicio_re_osc4 = agora
                 else:
-                    # Tipo 2: Micro deslocamentos (10 ciclos)
-                    if self.contador_micro_desloc >= 10:
-                        twist.linear.x = 0.0
-                        twist.angular.z = 0.0
-                        self.get_logger().info("Sequência de 10 micro deslocamentos concluída. Retomando estado anterior.")
-                        self.estado_atual = self.estado_origem_desvio
-                        self.contador_micro_desloc = 0
-                        self.tipo_re_atual = 1  # alterna de volta
+                    if agora - self.tempo_inicio_re_osc4 < 5.5:  # 4.2 ok key gira após ré quando oscila 3 vezes
+                        self.get_logger().info(f"[OSC4] dist_90={self.dist_90:.2f}m  dist_270={self.dist_270:.2f}m")
+                        if self.dist_90 > self.dist_270:
+                            twist.angular.z = 2.2
+                            self.get_logger().info("[OSC4] Girando para ESQUERDA (esquerda mais aberta)")
+                        else:
+                            twist.angular.z = -2.2
+                            self.get_logger().info("[OSC4] Girando para DIREITA (direita mais aberta)")
                     else:
-                        self.contador_micro_desloc += 1
-                        if self.micro_fase == 0:  # frente + curva para o lado oposto
-                            twist.linear.x = 0.1
-                            twist.angular.z = base_vel_angular * 0.8 * (-self.direcao_desvio)
-                            self.micro_fase = 1
-                        else:  # trás + curva para o lado do obstáculo
-                            twist.linear.x = -0.1
-                            twist.angular.z = base_vel_angular * 0.8 * self.direcao_desvio
-                            self.micro_fase = 0
+                        self.fase_osc4 = None
+                        self.estado_atual = self.estado_origem_desvio
+                        self.t_ini_desvio_obstaculo = 0.0
+
 
         elif self.estado_atual == Estados.RE_PRE_DESVIO:
             distancia_percorrida_re_pre_desvio = np.hypot(self.current_x - self.x_ini_re_pre_desvio, self.current_y - self.y_ini_re_pre_desvio)
@@ -883,7 +1054,7 @@ class ControleRobo(Node):
                     self.estado_atual = Estados.DESVIANDO_DE_OBSTACULO_2
                 else:
                     self.get_logger().info("Centralizando garra com o mastro da bandeira...")
-                    twist.angular.z = (base_vel_angular * 0.25) * self.direcao_bandeira
+                    twist.angular.z = (base_vel_angular * 0.30) * self.direcao_bandeira  #param original 0.25 ANDRE
                     if self.obstaculo_a_esquerda or self.obstaculo_a_direita:
                         twist.linear.x = base_vel_linear * 0.5
             else:
@@ -943,19 +1114,22 @@ class ControleRobo(Node):
             elif self.passo_captura == 5:
                 self.get_logger().info("Bandeira capturada com sucesso! Retornando para a base")
                 if self.arena_identificada == 'PAREDES':
-                    # Arena Paredes: retorna ao ponto de nascimento usando odometria, depois
-                    # entrega o controle a RETORNANDO_PARA_BASE para centralização e depósito.
-                    self.get_logger().info(f"[AP] Retorno por odometria ativado. Alvo: start=({self.start_x:.2f}, {self.start_y:.2f}). Raio de chegada: {self.ap_raio_chegada_retorno}m.")
-                    self.ap_retorno_odometria_ativo = True
-                    self.estado_atual = Estados.AP_RETORNO_ODOMETRIA
+                    self.get_logger().info("[AP] Captura concluída. Procurando parede para retornar à base.")
+                    self.contador_ciclos_nova_parede = 0
+                    self.fase_inicial_retorno_concluida = True  # pula avanço+giro inicial
+                    self.parede_suprimida_rumo_solo_azul = True  # será reabilitada ao entrar na área base
+                    self.estado_atual = Estados.RETORNANDO_PARA_BASE
+                    
                 else:
                     self.estado_atual = Estados.RETORNANDO_PARA_BASE
                 self.passo_captura = 0
+                self.ja_entrou_regiao_base = False   # reseta para o novo ciclo de retorno
                 self.indices_frente_esquerda = self._indices_frente_esquerda_retorno
                 self.indices_frente_direita = self._indices_frente_direita_retorno
                 self._zona_cega_mastro_ativa = True
                 self.get_logger().info("Zona cega frontal ativada: ignorando mastro capturado no LiDAR.")
-                self.fase_inicial_retorno_concluida = False
+                if self.arena_identificada != 'PAREDES':
+                    self.fase_inicial_retorno_concluida = False
                 self.subfase_inicial_retorno = 0
                 self.tempo_inicio_subfase_retorno = time.time()
 
@@ -1064,9 +1238,35 @@ class ControleRobo(Node):
                 self.y_ini_caminhada_reorientacao = self.current_y
                 self.estado_atual = Estados.GIRANDO_180_AREA_SOLO_AZUL
             else:
-                self.get_logger().info("Permanecendo na área de solo azul, andando em linha reta procurando pela bandeira azul...")
-                twist.linear.x = base_vel_linear
-                twist.angular.z = 0.0
+                t = tempo_dentro_solo_azul
+                fase1_fim = self.tempo_linha_reta_solo_azul
+                fase2_fim = fase1_fim + self.tempo_giro_solo_azul
+                fase3_fim = fase2_fim + self.tempo_linha_reta2_solo_azul
+
+                if not self.protocolo_solo_azul_executado and t < fase1_fim:
+                    # Fase 1: linha reta por 10s
+                    self.get_logger().info(f"[SOLO AZUL] Fase 1 - Linha reta ({t:.1f}s / {fase1_fim:.1f}s)")
+                    twist.linear.x = base_vel_linear
+                    twist.angular.z = 0.0
+                elif not self.protocolo_solo_azul_executado and t < fase2_fim:
+                    # Fase 2: giro para direita por 3s
+                    self.get_logger().info(f"[SOLO AZUL] Fase 2 - Girando direita ({t - fase1_fim:.1f}s / {self.tempo_giro_solo_azul:.1f}s)")
+                    twist.linear.x = 0.0
+                    twist.angular.z = -base_vel_angular  #key velocidade do giro para direita
+                elif not self.protocolo_solo_azul_executado and t < fase3_fim:
+                    # Fase 3: linha reta por 3s
+                    self.get_logger().info(f"[SOLO AZUL] Fase 3 - Linha reta ({t - fase2_fim:.1f}s / {self.tempo_linha_reta2_solo_azul:.1f}s)")
+                    twist.linear.x = base_vel_linear
+                    twist.angular.z = 0.0
+                else:
+                    # Fases concluídas: marca como executado para nunca repetir
+                    if not self.protocolo_solo_azul_executado:
+                        self.protocolo_solo_azul_executado = True
+                        self.get_logger().info("[SOLO AZUL] Protocolo (linha reta + giro + linha reta) concluído. Não será repetido.")
+                    # Anda normalmente procurando bandeira
+                    self.get_logger().info("Permanecendo na área de solo azul, andando em linha reta procurando pela bandeira azul...")
+                    twist.linear.x = base_vel_linear
+                    twist.angular.z = 0.0
 
         elif self.estado_atual == Estados.GIRANDO_180_AREA_SOLO_AZUL:
             if self.bandeira_a_frente:
@@ -1106,12 +1306,17 @@ class ControleRobo(Node):
 
         ## APROXIMANDO DA PAREDE (ARENA PAREDES)
         elif self.estado_atual == Estados.APROXIMANDO_PAREDE:
-            if self.bandeira_a_frente:
+            if self.bandeira_capturada and self.base_a_frente:
+                self.get_logger().info("[RETORNO] Base detectada durante APROXIMANDO_PAREDE! Suspendendo.")
+                self.estado_salvo_pre_base = Estados.APROXIMANDO_PAREDE
+                self.estado_atual = Estados.RETORNANDO_PARA_BASE
+            elif self.bandeira_a_frente and not self.bandeira_capturada:
                 self.get_logger().info("Bandeira detectada durante a aproximação da parede! Priorizando a bandeira.")
                 self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
             # Removido priorização de área azul aqui para evitar loops quando já está em permanência
             elif not self.parede_a_frente:
                 if self.obstaculo_a_frente:
+                    # Parede sem cor foco (ou sem parede alguma): desvio comum, ida e retorno
                     self.estado_origem_desvio = Estados.APROXIMANDO_PAREDE
                     self.contador_oscilacao = 0
                     self.direcao_desvio_anterior = None
@@ -1127,11 +1332,6 @@ class ControleRobo(Node):
                 if dist_atual_parede <= self.distancia_aproximacao_parede:
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
-                    # Determina, de forma FIXA para este encontro com a parede, qual lado do
-                    # sensor frontal (esquerda/direita) está mais próximo dela. O robô gira para
-                    # o lado OPOSTO e passa a tangenciar a parede por esse mesmo lado mais
-                    # próximo (ex.: parede mais próxima à esquerda -> gira para a direita e
-                    # tangencia usando o sensor lateral esquerdo).
                     leituras_frente_esq_lado_parede = [d for d in self.distancias_frente_esquerda if np.isfinite(d) and d > 0.05]
                     leituras_frente_dir_lado_parede = [d for d in self.distancias_frente_direita if np.isfinite(d) and d > 0.05]
                     dist_frente_esq_lado_parede = min(leituras_frente_esq_lado_parede) if leituras_frente_esq_lado_parede else 10.0
@@ -1140,41 +1340,90 @@ class ControleRobo(Node):
                     lado_txt_parede = 'ESQUERDA' if self.lado_seguindo_parede == Direcoes.ESQUERDA.value else 'DIREITA'
                     self.get_logger().info(f"Parede alcançada a {dist_atual_parede:.2f}m! Lado mais próximo (sensor frontal): {lado_txt_parede}. Girando 90° para o lado oposto e tangenciando por esse lado...")
                     self.yaw_ini_giro_paralelo_parede = self.current_yaw
+                    # Inicializa ângulos simétricos para critério de paralelismo
+                    if self.dist_90 <= self.dist_270:
+                        self.gpp_angulo_a = 90 - self.gpp_offset   # ex: 60°
+                        self.gpp_angulo_b = 90 + self.gpp_offset   # ex: 120°
+                    else:
+                        self.gpp_angulo_a = 270 - self.gpp_offset  # ex: 240°
+                        self.gpp_angulo_b = 270 + self.gpp_offset  # ex: 300°
+                    self.get_logger().info(f"[GPP] Monitorando {self.gpp_angulo_a}° e {self.gpp_angulo_b}° para detectar paralelismo.")
+                    self.gpp_tempo_inicio = time.time()
                     self.estado_atual = Estados.GIRANDO_PARALELO_PAREDE
-                elif self.obstaculo_a_frente:
-                    self.estado_origem_desvio = Estados.APROXIMANDO_PAREDE
-                    self.contador_oscilacao = 0
-                    self.direcao_desvio_anterior = None
-                    self.estado_atual = Estados.DESVIANDO_DE_OBSTACULO
                 else:
+                    # Parede colorida visível mas ainda longe: avança em direção a ela.
+                    # NÃO vai para DESVIANDO quando há obstáculo — a distância dupla
+                    # (1.22m) detecta a própria parede colorida como obstáculo muito
+                    # antes dos 0.67m de aproximação, causando o loop.
+                    # O robô deve simplesmente continuar avançando para a parede colorida.
                     if (direcao_parede == Direcoes.ESQUERDA.value and self.obstaculo_a_esquerda) or (direcao_parede == Direcoes.DIREITA.value and self.obstaculo_a_direita):
                         twist.angular.z = base_vel_angular * 0.50 * (direcao_parede if not parede_centralizada else 0)
                     else:
                         twist.angular.z = base_vel_angular * (direcao_parede if not parede_centralizada else 0)
                     twist.linear.x = base_vel_linear
-
         ## GIRANDO PARA FICAR PARALELO/TANGENTE À PAREDE (ARENA PAREDES)
         elif self.estado_atual == Estados.GIRANDO_PARALELO_PAREDE:
-            if self.bandeira_a_frente:
+            if self.bandeira_a_frente and not self.bandeira_capturada:
                 self.get_logger().info("Bandeira detectada durante o giro para ficar paralelo à parede! Priorizando a bandeira.")
                 self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
             else:
-                # O giro de 90° é OBRIGATÓRIO e executado por completo: o sensor de desvio de
-                # obstáculo (frontal e lateral) permanece DESATIVADO durante todo o giro.
-                delta_yaw_parede = self.current_yaw - self.yaw_ini_giro_paralelo_parede
-                delta_yaw_parede = np.arctan2(np.sin(delta_yaw_parede), np.cos(delta_yaw_parede))
-                if abs(delta_yaw_parede) < np.radians(90):
-                    twist.linear.x = 0.0
-                    twist.angular.z = base_vel_angular * (-self.lado_seguindo_parede)
-                else:
+                # Critério de parada: lê os dois ângulos simétricos ao lado da parede.
+                # Quando as distâncias forem iguais dentro de gpp_margem, o robô está paralelo.
+                da = db = float('inf')
+                if self.ultimo_scan_ranges and len(self.ultimo_scan_ranges) > max(self.gpp_angulo_a, self.gpp_angulo_b):
+                    da = self.ultimo_scan_ranges[self.gpp_angulo_a]
+                    db = self.ultimo_scan_ranges[self.gpp_angulo_b]
+                    if not np.isfinite(da): da = float('inf')
+                    if not np.isfinite(db): db = float('inf')
+
+                paralelo = False
+                if np.isfinite(da) and np.isfinite(db) and (da + db) > 0:
+                    diff_rel = abs(da - db) / ((da + db) / 2.0)
+                    paralelo = diff_rel <= self.gpp_margem   #key  gpp_margem
+                    self.get_logger().info(
+                        f"[GPP] {self.gpp_angulo_a}°={da:.2f}m  {self.gpp_angulo_b}°={db:.2f}m  "
+                        f"diff={diff_rel*100:.1f}%  paralelo={'SIM ✓' if paralelo else 'não'}"
+                    )
+
+                if paralelo:
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
-                    self.get_logger().info("Giro de 90° concluído. Iniciando caminhada tangenciando a parede...")
+                    self.get_logger().info(
+                        f"[GPP] Paralelo à parede ({self.gpp_angulo_a}°={da:.2f}m ≈ "
+                        f"{self.gpp_angulo_b}°={db:.2f}m). Iniciando caminhada tangenciando a parede..."
+                    )
                     self.estado_atual = Estados.SEGUINDO_PAREDE
-
+                else:
+                    # Timeout: se passou do tempo limite, força entrada em SEGUINDO_PAREDE
+                    if time.time() - self.gpp_tempo_inicio > self.gpp_timeout:
+                        self.get_logger().info(f"[GPP] Timeout de {self.gpp_timeout}s atingido. Forçando SEGUINDO_PAREDE.")
+                        twist.linear.x = 0.0
+                        twist.angular.z = 0.0
+                        self.estado_atual = Estados.SEGUINDO_PAREDE
+                    else:
+                        # Ainda não paralelo: continua girando no mesmo sentido
+                        twist.linear.x = 0.0
+                        twist.angular.z = base_vel_angular * 2.1 * (-self.lado_seguindo_parede)
+                    
         ## SEGUINDO A PAREDE TANGENCIALMENTE (ARENA PAREDES)
         elif self.estado_atual == Estados.SEGUINDO_PAREDE:
-            if self.bandeira_a_frente:
+            if self.bandeira_capturada and self.base_a_frente:
+                if self.porcentagem_base_na_camera >= 8.5:
+                    # Base suficientemente próxima: vai direto depositar
+                    self.get_logger().info(f"[RETORNO] Base alcançada ({self.porcentagem_base_na_camera:.1f}%) durante seguimento! Depositando.")
+                    self.distancia_max_obstaculo_frente = 0.63
+                    self.contador_oscilacao_centralizacao_base = 0
+                    self.tempo_inicio_retorno = time.time()
+                    self.estado_atual = Estados.POSICIONANDO_PARA_DEPOSITO
+                else:
+                    self.get_logger().info("[RETORNO] Base detectada durante seguimento da parede! Priorizando.")
+                    self.estado_salvo_pre_base = Estados.SEGUINDO_PAREDE
+                    self.estado_atual = Estados.RETORNANDO_PARA_BASE
+            elif self.bandeira_capturada and self.regiao_base_a_frente and not self.ja_entrou_regiao_base:
+                self.get_logger().info("[RETORNO] Área base detectada durante seguimento da parede! Priorizando.")
+                self.estado_salvo_pre_base = Estados.SEGUINDO_PAREDE
+                self.estado_atual = Estados.RETORNANDO_PARA_BASE
+            elif self.bandeira_a_frente and not self.bandeira_capturada:
                 self.get_logger().info("Bandeira detectada durante o seguimento da parede! Priorizando a bandeira.")
                 self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
             elif self.obstaculo_frente_oposto_parede():
@@ -1196,18 +1445,18 @@ class ControleRobo(Node):
                     # Antes de iniciar o giro, avança 0.8s em linha reta para ultrapassar a quina.
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
-                    self.get_logger().info("Contato lateral com a parede perdido! Avançando 0.8s antes do giro pós-parede...")
+                    self.get_logger().info("FIM DA PAREDE! HORA DE VIRAR! Contato lateral com a parede perdido! Avançando 0.8s antes do giro pós-parede...")
                     self.ap_tempo_ini_avanco_pre_giro = time.time()
                     self.estado_atual = Estados.AP_AVANCO_PRE_GIRO_NOVA_PAREDE
                 elif dist_lateral_parede < self.distancia_minima_seguindo_parede:
                     # Muito perto da parede (mas ainda dentro da faixa de tangenciamento): afasta
                     # um pouco, virando para o lado oposto, sempre mantendo-se em movimento
-                    twist.linear.x = velocidade_seguindo_parede
-                    twist.angular.z = base_vel_angular * 0.5 * (-self.lado_seguindo_parede)
+                    twist.linear.x = velocidade_seguindo_parede * 1.2  #Andre
+                    twist.angular.z = base_vel_angular * 0.5 * (-self.lado_seguindo_parede) #original 0.5
                 elif dist_lateral_parede > self.distancia_maxima_seguindo_parede:
                     # Muito longe da parede (mas ainda dentro da faixa de tangenciamento):
                     # aproxima um pouco, sempre mantendo-se em movimento
-                    twist.linear.x = velocidade_seguindo_parede
+                    twist.linear.x = velocidade_seguindo_parede * 1.3
                     twist.angular.z = base_vel_angular * 0.5 * self.lado_seguindo_parede
                 else:
                     # Dentro da faixa de correção fina: segue reto
@@ -1218,7 +1467,7 @@ class ControleRobo(Node):
         ## Inserido entre a perda de contato lateral e o giro, para ultrapassar a quina da parede.
         ## Só a bandeira pode interromper este avanço (área solo azul e parede: desativadas).
         elif self.estado_atual == Estados.AP_AVANCO_PRE_GIRO_NOVA_PAREDE:
-            if self.bandeira_a_frente:
+            if self.bandeira_a_frente and not self.bandeira_capturada:
                 self.get_logger().info("Bandeira detectada durante o avanço pré-giro! Priorizando a bandeira.")
                 self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
             else:
@@ -1242,26 +1491,42 @@ class ControleRobo(Node):
             # este estado. Só a bandeira (prioridade máxima) pode interromper.
             # A detecção de solo azul e de parede é verificada apenas ao fim do protocolo
             # completo (ao final de AVANCANDO_FIXO_NOVA_PAREDE ciclo 2/2).
-            if self.bandeira_a_frente:
+            if self.bandeira_a_frente and not self.bandeira_capturada:
                 self.get_logger().info("Bandeira detectada durante o giro pós-parede! Priorizando a bandeira.")
                 self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
             else:
                 # Sensor de desvio de obstáculo (frontal e lateral) permanece DESATIVADO durante
                 # este giro de 90° para o lado da parede: só é reativado após o avanço fixo de
                 # 0.5m em AVANCANDO_FIXO_NOVA_PAREDE.
+                # Arma o timer na primeira vez que entra no giro
+                if self.t_ini_giro_nova_parede == 0.0:
+                    self.t_ini_giro_nova_parede = time.time()
                 delta_yaw_nova_parede = self.current_yaw - self.yaw_ini_giro_nova_parede
                 delta_yaw_nova_parede = np.arctan2(np.sin(delta_yaw_nova_parede), np.cos(delta_yaw_nova_parede))
                 # Ciclo 0: giro de 49°; Ciclo 1: giro de 52.5° (metade)
-                angulo_giro_ciclo = 65.0 if self.contador_ciclos_nova_parede == 0 else 42.5  #key
-                if abs(delta_yaw_nova_parede) < np.radians(angulo_giro_ciclo):
-                    twist.linear.x = 0.0
-                    twist.angular.z = base_vel_angular * self.lado_seguindo_parede
+                #angulo_giro_ciclo = 65.0 if self.contador_ciclos_nova_parede == 0 else 42.5  #key original
+                angulo_giro_ciclo = 47.0 if self.contador_ciclos_nova_parede == 0 else 43.5  #key original 51 e 37.5
+                timeout_giro = (time.time() - self.t_ini_giro_nova_parede) >= self.timeout_giro_nova_parede
+                if abs(delta_yaw_nova_parede) < np.radians(angulo_giro_ciclo) and not timeout_giro:
+                    #twist.linear.x = 0.0
+                    #twist.angular.z = base_vel_angular * self.lado_seguindo_parede
+                    if self.contador_ciclos_nova_parede == 0:
+                        # Primeiro giro: velocidade normal
+                        twist.angular.z = base_vel_angular * 2.1 * self.lado_seguindo_parede #original 1.7
+                    else:
+                        # Segundo giro: MAIS RÁPIDO (aumente o número se quiser ainda mais rápido)
+                        twist.angular.z = base_vel_angular * 2.3 * self.lado_seguindo_parede   # ← AQUI!
                 else:
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
-                    self.get_logger().info(f"Giro de {angulo_giro_ciclo}° concluído (ciclo {self.contador_ciclos_nova_parede + 1}/2). Iniciando avanço fixo...")
+                    self.t_ini_giro_nova_parede = 0.0  # reset timer
+                    if timeout_giro:
+                        self.get_logger().warn(f"[TIMEOUT] Giro encerrado por tempo ({self.timeout_giro_nova_parede}s). Odometria pode ter falhado.")
+                    else:
+                        self.get_logger().info(f"Giro de {angulo_giro_ciclo}° concluído (ciclo {self.contador_ciclos_nova_parede + 1}/2). Iniciando avanço fixo...")
                     self.x_ini_avanco_fixo_nova_parede = self.current_x
                     self.y_ini_avanco_fixo_nova_parede = self.current_y
+                    self.t_ini_avanco_fixo_nova_parede = 0.0  # garante que o timer será armado na 1ª iteração do avanço
                     self.estado_atual = Estados.AVANCANDO_FIXO_NOVA_PAREDE
 
         ## AVANÇO FIXO EM LINHA RETA APÓS O GIRO, ANTES DE RETOMAR A BUSCA POR NOVA PAREDE (ARENA PAREDES)
@@ -1270,7 +1535,7 @@ class ControleRobo(Node):
             # este estado. Só a bandeira (prioridade máxima) pode interromper.
             # Ao fim do protocolo completo (ciclo 2/2), a hierarquia é verificada: bandeira >
             # solo azul > parede, a partir de uma posição e orientação estáveis.
-            if self.bandeira_a_frente:
+            if self.bandeira_a_frente and not self.bandeira_capturada:
                 self.get_logger().info("Bandeira detectada durante o avanço fixo pós-parede! Priorizando a bandeira.")
                 self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
             else:
@@ -1278,14 +1543,37 @@ class ControleRobo(Node):
                 # avanço fixo; só volta a ser considerado em APROXIMANDO_PAREDE logo abaixo, ao
                 # retomar oficialmente a busca por uma nova parede.
                 # Ciclo 0: avança 0.5m; Ciclo 1: avança 0.25m (metade)
-                distancia_alvo_ciclo = self.distancia_avanco_fixo_nova_parede if self.contador_ciclos_nova_parede == 0 else self.distancia_avanco_fixo_nova_parede / 2.0
+                # Arma o timer na primeira vez que entra no avanço
+                if self.t_ini_avanco_fixo_nova_parede == 0.0:
+                    self.t_ini_avanco_fixo_nova_parede = time.time()
+                distancia_alvo_ciclo = self.distancia_avanco_fixo_nova_parede if self.contador_ciclos_nova_parede == 0 else self.distancia_avanco_fixo_nova_parede * 1.9 #Andre
                 distancia_avancada_fixa_parede = np.hypot(self.current_x - self.x_ini_avanco_fixo_nova_parede, self.current_y - self.y_ini_avanco_fixo_nova_parede)
-                if distancia_avancada_fixa_parede < distancia_alvo_ciclo:
-                    twist.linear.x = base_vel_linear * self.fator_velocidade_arena_paredes  # parametro: fator_velocidade_arena_paredes
+                timeout_avanco = (time.time() - self.t_ini_avanco_fixo_nova_parede) >= self.timeout_avanco_fixo_nova_parede
+                # Proteção: se o timeout disparar mas o robô não andou nada (odometria congelada),
+                # reseta a posição inicial com o current_x/y atual e reinicia o timer uma única vez.
+                if timeout_avanco and distancia_avancada_fixa_parede < 0.05 and self.t_ini_avanco_fixo_nova_parede > 0.0:
+                    self.get_logger().warn(f"[TIMEOUT-RESET] Odometria parece congelada (andou {distancia_avancada_fixa_parede:.3f}m em {self.timeout_avanco_fixo_nova_parede}s). Resetando posição inicial e timer.")
+                    self.x_ini_avanco_fixo_nova_parede = self.current_x
+                    self.y_ini_avanco_fixo_nova_parede = self.current_y
+                    self.t_ini_avanco_fixo_nova_parede = time.time()
+                    timeout_avanco = False  # cancela o timeout desta vez
+                if distancia_avancada_fixa_parede < distancia_alvo_ciclo and not timeout_avanco:
+                    if self.contador_ciclos_nova_parede == 0:
+                        # 1º ciclo (avanço maior) - velocidade normal ou ligeiramente aumentada
+                        twist.linear.x = base_vel_linear * 1.17  # 0.85
+                        self.get_logger().info(f"Avançando fixo - 1º ciclo (velocidade normal)")
+                    else:
+                        # 2º ciclo (avanço menor) - velocidade MAIS RÁPIDA
+                        twist.linear.x = base_vel_linear * 1.55   # ← Aumente aqui se quiser ainda mais rápido
+                        self.get_logger().info(f"Avançando fixo - 2º ciclo (VELOCIDADE AUMENTADA)")
+                    
                     twist.angular.z = 0.0
                 else:
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
+                    self.t_ini_avanco_fixo_nova_parede = 0.0  # reset timer
+                    if timeout_avanco:
+                        self.get_logger().warn(f"[TIMEOUT] Avanço encerrado por tempo ({self.timeout_avanco_fixo_nova_parede}s). Odometria pode ter falhado.")
                     if self.contador_ciclos_nova_parede == 0:
                         # 1º ciclo concluído: prepara o 2º
                         self.get_logger().info(f"Avanço de {distancia_alvo_ciclo}m concluído (ciclo 1/2). Iniciando 2º ciclo: giro de 27.5° + avanço de {self.distancia_avanco_fixo_nova_parede / 2.0}m...")
@@ -1296,40 +1584,53 @@ class ControleRobo(Node):
                         # 2º ciclo concluído: protocolo completo. Agora verifica a hierarquia
                         # completa a partir de uma posição estável antes de retomar o tangenciamento.
                         self.contador_ciclos_nova_parede = 0  # zera para o próximo uso
-                        if self.bandeira_a_frente:
-                            self.get_logger().info("Protocolo Giro+Avanço concluído. Bandeira detectada! Priorizando.")
-                            self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
-                        elif self.area_solo_azul_a_frente:
-                            self.get_logger().info(">>> Protocolo Giro+Avanço concluído. ÁREA DE SOLO AZUL DETECTADA! Navegando para a área. <<<")
-                            self.ap_contador_perda_solo_azul = 0
-                            self.tempo_inicio_navegando_para_solo_azul = time.time()
-                            self.parede_suprimida_rumo_solo_azul = False
-                            self.estado_atual = Estados.NAVEGANDO_PARA_AREA_SOLO_AZUL
+                        # Hierarquia depende da fase: IDA ou RETORNO
+                        if self.bandeira_capturada:
+                            # RETORNO: base > área base > parede
+                            if self.base_a_frente:
+                                self.get_logger().info("[RETORNO] Protocolo Giro+Avanço concluído. Base detectada! Priorizando.")
+                                self.estado_atual = Estados.RETORNANDO_PARA_BASE
+                            elif self.regiao_base_a_frente and not self.ja_entrou_regiao_base:
+                                self.get_logger().info("[RETORNO] Protocolo Giro+Avanço concluído. Área base detectada! Priorizando.")
+                                self.estado_atual = Estados.RETORNANDO_PARA_BASE
+                            else:
+                                self.get_logger().info(f"[RETORNO] Avanço (ciclo 2/2) concluído. Retomando busca por parede...")
+                                self.estado_atual = Estados.APROXIMANDO_PAREDE
                         else:
-                            self.get_logger().info(f"Avanço de {distancia_alvo_ciclo}m concluído (ciclo 2/2). Sensores de obstáculo reativados. Retomando a busca por uma nova parede...")
-                            self.estado_atual = Estados.APROXIMANDO_PAREDE
+                            # IDA: bandeira > solo azul > parede
+                            if self.bandeira_a_frente:
+                                self.get_logger().info("Protocolo Giro+Avanço concluído. Bandeira detectada! Priorizando.")
+                                self.estado_atual = Estados.NAVEGANDO_PARA_BANDEIRA
+                            elif self.area_solo_azul_a_frente:
+                                self.get_logger().info(">>> Protocolo Giro+Avanço concluído. ÁREA DE SOLO AZUL DETECTADA! Navegando para a área. <<<")
+                                self.ap_contador_perda_solo_azul = 0
+                                self.tempo_inicio_navegando_para_solo_azul = time.time()
+                                self.parede_suprimida_rumo_solo_azul = False
+                                self.estado_atual = Estados.NAVEGANDO_PARA_AREA_SOLO_AZUL
+                            else:
+                                self.get_logger().info(f"Avanço de {distancia_alvo_ciclo}m concluído (ciclo 2/2). Sensores de obstáculo reativados. Retomando a busca por uma nova parede...")
+                                self.estado_atual = Estados.APROXIMANDO_PAREDE
 
         ## RETORNANDO PARA BASE
         elif self.estado_atual == Estados.RETORNANDO_PARA_BASE:
-            self.distancia_max_obstaculo_frente = 0.79
+            # Arena Cilindros usa 0.79m (mais margem para desviar do mastro capturado na reta final).
+            # Arena Paredes usa 0.61m (igual à ida, evita falsos positivos durante tangenciamento).
+            if self.arena_identificada == 'PAREDES':
+                self.distancia_max_obstaculo_frente = 0.61
+            else:
+                self.distancia_max_obstaculo_frente = 0.79
+
+            # Reabilita detecção de parede
+            if self.parede_suprimida_rumo_solo_azul:
+                self.parede_suprimida_rumo_solo_azul = False
 
             if not self.fase_inicial_retorno_concluida:
-                # Primeira coisa a ser feita ao entrar em RETORNANDO_PARA_BASE: avança 0.47m e
-                # em seguida gira 149°.
-                # TESTE DE DEBUG: nesta fase o sensor frontal fica desativado (não é verificado) e o
-                # desvio de obstáculo passa a usar somente os sensores laterais, reconfigurados para
-                # operar na mesma faixa angular que o sensor frontal usa. Antes de ajustar os sensores,
-                # antes de iniciar o avanço e após o término do giro, o robô aguarda parado por
-                # self.duracao_pausa_retorno (1.7s) em cada uma dessas etapas, para tentar isolar a causa do bug.
-                # self.subfase_inicial_retorno: 0 = pausa inicial, 1 = pausa pós-ajuste de sensores,
-                # 2 = avançando 0.47m, 3 = girando 149°, 4 = pausa pós-giro, concluído quando
-                # fase_inicial_retorno_concluida=True
+                # [Mantém toda a fase inicial de avanço + giro ]
                 if self.subfase_inicial_retorno == 0:
-                    # Pausa de 1.7s logo ao ativar o RETORNANDO_PARA_BASE, antes de qualquer ajuste de sensor
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
                     if time.time() - self.tempo_inicio_subfase_retorno >= self.duracao_pausa_retorno:
-                        self.get_logger().info("Pausa inicial de 1.7s concluída. Ajustando sensores do LiDAR (frontal desativado, laterais na faixa frontal)...")
+                        self.get_logger().info("Pausa inicial concluída...")
                         self._indices_esquerda_orig_retorno = list(self.indices_esquerda)
                         self._indices_direita_orig_retorno = list(self.indices_direita)
                         self.indices_esquerda = list(self.indices_frente_esquerda)
@@ -1337,118 +1638,224 @@ class ControleRobo(Node):
                         self.subfase_inicial_retorno = 1
                         self.tempo_inicio_subfase_retorno = time.time()
                 elif self.subfase_inicial_retorno == 1:
-                    # Pausa de 1.7s após o ajuste dos sensores, antes de iniciar o avanço
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
                     if time.time() - self.tempo_inicio_subfase_retorno >= self.duracao_pausa_retorno:
-                        self.get_logger().info("Pausa pós-ajuste de sensores concluída. Iniciando avanço de 0.47m...")
+                        self.get_logger().info("Pausa pós-ajuste concluída. Iniciando avanço...")
                         self.x_ini_avanco_inicial_retorno = self.current_x
                         self.y_ini_avanco_inicial_retorno = self.current_y
+                        self.tempo_inicio_avanco_inicial_retorno = time.time()
                         self.subfase_inicial_retorno = 2
                 elif self.subfase_inicial_retorno == 2:
                     if self.obstaculo_a_esquerda or self.obstaculo_a_direita:
                         twist.linear.x = 0.0
                         twist.angular.z = 0.0
-                        self.get_logger().info("Obstáculo detectado pelos sensores laterais (faixa frontal) durante o avanço inicial do retorno! Suspendendo manobra, restaurando sensores e prosseguindo com a busca normal pela base.")
+                        self.get_logger().info("Obstáculo lateral detectado. Restaurando sensores...")
                         self.indices_esquerda = self._indices_esquerda_orig_retorno
                         self.indices_direita = self._indices_direita_orig_retorno
                         self.fase_inicial_retorno_concluida = True
                     else:
-                        distancia_avancada_inicial_retorno = np.hypot(self.current_x - self.x_ini_avanco_inicial_retorno, self.current_y - self.y_ini_avanco_inicial_retorno)
-                        if distancia_avancada_inicial_retorno < self.distancia_avanco_inicial_retorno:
-                            self.get_logger().info(f"Andando para frente {self.distancia_avanco_inicial_retorno}m antes de buscar a base...")
-                            twist.linear.x = base_vel_linear
+                        tempo_decorrido = time.time() - self.tempo_inicio_avanco_inicial_retorno
+                        if tempo_decorrido < self.duracao_avanco_inicial_retorno:
+                            twist.linear.x = 0.25
                             twist.angular.z = 0.0
                         else:
                             twist.linear.x = 0.0
                             twist.angular.z = 0.0
-                            self.get_logger().info("Avanço de 0.47m concluído. Girando 149°...")
+                            self.get_logger().info("Avanço inicial concluído. Iniciando giro...")
                             self.yaw_ini_giro_inicial_retorno = self.current_yaw
                             self.subfase_inicial_retorno = 3
                 elif self.subfase_inicial_retorno == 3:
                     if self.obstaculo_a_esquerda or self.obstaculo_a_direita:
                         twist.linear.x = 0.0
                         twist.angular.z = 0.0
-                        self.get_logger().info("Obstáculo detectado pelos sensores laterais (faixa frontal) durante o giro inicial do retorno! Suspendendo manobra, restaurando sensores e prosseguindo com a busca normal pela base.")
+                        self.get_logger().info("Obstáculo lateral detectado durante giro. Restaurando sensores...")
                         self.indices_esquerda = self._indices_esquerda_orig_retorno
                         self.indices_direita = self._indices_direita_orig_retorno
                         self.fase_inicial_retorno_concluida = True
                     else:
-                        delta_yaw_inicial_retorno = self.current_yaw - self.yaw_ini_giro_inicial_retorno
-                        delta_yaw_inicial_retorno = np.arctan2(np.sin(delta_yaw_inicial_retorno), np.cos(delta_yaw_inicial_retorno))
-                        if abs(delta_yaw_inicial_retorno) < np.radians(149):
-                            self.get_logger().info("Girando 149°...")
+                        tempo_decorrido_giro = time.time() - self.tempo_inicio_subfase_retorno
+                        if tempo_decorrido_giro < self.duracao_giro_inicial_retorno:
                             twist.linear.x = 0.0
-                            twist.angular.z = base_vel_angular * self.direcao_giro_inicial_retorno
+                            twist.angular.z = 3.8
                         else:
                             twist.linear.x = 0.0
                             twist.angular.z = 0.0
-                            self.get_logger().info("Giro de 149° concluído. Restaurando sensores do LiDAR. Aguardando 1.7s antes de iniciar a busca pela base...")
+                            self.get_logger().info("Giro inicial concluído. Restaurando sensores...")
                             self.indices_esquerda = self._indices_esquerda_orig_retorno
                             self.indices_direita = self._indices_direita_orig_retorno
                             self.subfase_inicial_retorno = 4
                             self.tempo_inicio_subfase_retorno = time.time()
                 else:
-                    # Pausa de 1.7s após o giro, com os sensores já restaurados, antes de
-                    # prosseguir com a busca normal pela base
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
                     if time.time() - self.tempo_inicio_subfase_retorno >= self.duracao_pausa_retorno:
-                        self.get_logger().info("Pausa pós-giro de 1.7s concluída. Iniciando busca pela base...")
+                        self.get_logger().info("Fase inicial de retorno concluída.")
                         self.fase_inicial_retorno_concluida = True
 
             elif self.base_a_frente and self.porcentagem_base_na_camera >= 7.1:
                 twist.linear.x = 0.0
                 twist.angular.z = 0.0
                 self.distancia_max_obstaculo_frente = 0.63
-                self.get_logger().info("Base alcançada! Iniciando centralização para o depósito...")
+                self.get_logger().info("Base alcançada! Iniciando centralização...")
                 self.estado_atual = Estados.POSICIONANDO_PARA_DEPOSITO
                 self.contador_oscilacao_centralizacao_base = 0
                 self.tempo_inicio_retorno = time.time()
 
-            elif self.obstaculo_a_frente:
+            elif self.obstaculo_a_frente and not (self.ja_entrou_regiao_base and self.base_a_frente):
+                # Desvia de obstáculo, EXCETO se já está na região da base e a base está visível:
+                # nesse caso a prioridade é ir para a base, não desviar do obstáculo (que pode ser
+                # o próprio mastro/estrutura da base).
                 self.estado_origem_desvio = Estados.RETORNANDO_PARA_BASE
                 self.contador_oscilacao = 0
                 self.direcao_desvio_anterior = None
                 self.estado_atual = Estados.DESVIANDO_DE_OBSTACULO
 
             elif self.base_a_frente:
-                base_centralizada = (
-                    self.pos_x_base_camera <= self.centro_x_camera + dx and
-                    self.pos_x_base_camera >= self.centro_x_camera - dx
-                )
+                base_centralizada = self.pos_x_base_camera <= self.centro_x_camera + dx and self.pos_x_base_camera >= self.centro_x_camera - dx
                 self.direcao_base = 1 if self.pos_x_base_camera < self.centro_x_camera - dx else -1
                 self.get_logger().info(f"Base visível ({self.porcentagem_base_na_camera:.1f}%). Navegando...")
-                if (self.direcao_base == Direcoes.ESQUERDA.value and self.obstaculo_a_esquerda) or \
-                   (self.direcao_base == Direcoes.DIREITA.value and self.obstaculo_a_direita):
-                    twist.angular.z = base_vel_angular * 0.50 * (self.direcao_base if not base_centralizada else 0)
-                else:
-                    twist.angular.z = base_vel_angular * (self.direcao_base if not base_centralizada else 0)
+                twist.angular.z = base_vel_angular * (self.direcao_base if not base_centralizada else 0)
                 twist.linear.x = base_vel_linear * (0.5 if self.porcentagem_base_na_camera >= 1.5 else 1.0)
 
-            elif self.dentro_da_regiao_base:
-                self.get_logger().info("Dentro da região da base. Avançando em linha reta...")
-                twist.linear.x = base_vel_linear
-                twist.angular.z = 0.0
+            elif self.dentro_da_regiao_base or self.ja_entrou_regiao_base:
+                if self.arena_identificada == 'PAREDES':
+                    # Arena Paredes: lógica complexa com delay e tangenciamento dentro da região.
+                    # Uma vez dentro da região, ja_entrou_regiao_base trava o robô neste bloco
+                    # permanentemente, mesmo que a câmera oscile.
+                    if not self.ja_entrou_regiao_base:
+                        self.ja_entrou_regiao_base = True
+                        self.get_logger().info(">>> Adentrou a região da base! Hierarquia fixada em Base > Parede.")
+                    if self.bandeira_capturada and self.tempo_entrada_regiao_base_retorno == 0.0:
+                        self.tempo_entrada_regiao_base_retorno = time.time()
 
-            elif self.regiao_base_a_frente:
-                regiao_centralizada = (
-                    self.pos_x_regiao_camera <= self.centro_x_camera + dx and
-                    self.pos_x_regiao_camera >= self.centro_x_camera - dx
-                )
-                direcao_regiao = 1 if self.pos_x_regiao_camera < self.centro_x_camera - dx else -1
-                self.get_logger().info("Região da base visível. Navegando para a região...")
-                if (direcao_regiao == Direcoes.ESQUERDA.value and self.obstaculo_a_esquerda) or \
-                   (direcao_regiao == Direcoes.DIREITA.value and self.obstaculo_a_direita):
-                    twist.angular.z = base_vel_angular * 0.50 * (direcao_regiao if not regiao_centralizada else 0)
+                    # Hierarquia dentro da região: 1º BASE → 2º PAREDE
+                    if self.base_a_frente:
+                        self.get_logger().info(f"[REGIÃO BASE] Base visível ({self.porcentagem_base_na_camera:.1f}%). Navegando para depositar.")
+                        base_centralizada = (
+                            self.pos_x_base_camera <= self.centro_x_camera + dx and
+                            self.pos_x_base_camera >= self.centro_x_camera - dx
+                        )
+                        self.direcao_base = 1 if self.pos_x_base_camera < self.centro_x_camera - dx else -1
+                        if (self.direcao_base == Direcoes.ESQUERDA.value and self.obstaculo_a_esquerda) or \
+                           (self.direcao_base == Direcoes.DIREITA.value and self.obstaculo_a_direita):
+                            twist.angular.z = base_vel_angular * 0.50 * (self.direcao_base if not base_centralizada else 0)
+                        else:
+                            twist.angular.z = base_vel_angular * (self.direcao_base if not base_centralizada else 0)
+                        twist.linear.x = base_vel_linear * (0.5 if self.porcentagem_base_na_camera >= 1.5 else 1.0)
+
+                    elif (self.parede_a_frente or self.obstaculo_a_frente) and self.arena_identificada == 'PAREDES':
+                        # Só inicia tangenciamento após o delay de tempo_delay_parede_regiao_base segundos.
+                        # EXCLUSIVO Arena Paredes: na Cilindros os cilindros têm o mesmo RGB da parede.
+                        tempo_na_regiao = time.time() - self.tempo_entrada_regiao_base_retorno
+                        #if self.tempo_entrada_regiao_base_retorno > 0.0 and tempo_na_regiao >= self.tempo_delay_parede_regiao_base:  #key tempo_delay_parede_regiao_base
+                        #    self.get_logger().info(f"[REGIÃO BASE] Parede detectada ({tempo_na_regiao:.1f}s na região ≥ {self.tempo_delay_parede_regiao_base}s). Iniciando tangenciamento.")
+                        #    self.contador_ciclos_nova_parede = 0
+                        #    self.parede_suprimida_rumo_solo_azul = False
+                        #    self.estado_atual = Estados.APROXIMANDO_PAREDE
+                        #-----------------
+                        if self.tempo_entrada_regiao_base_retorno > 0.0 and tempo_na_regiao >= self.tempo_delay_parede_regiao_base:  #key tempo_delay_parede_regiao_base
+                            self.get_logger().info(f"[REGIÃO BASE] Parede detectada ({tempo_na_regiao:.1f}s na região ≥ {self.tempo_delay_parede_regiao_base}s). Girando antes de tangenciar...")
+                            # Anda girando: 1 metro OU 4 segundos, o que vier primeiro
+                            msg_giro = Twist()
+                            msg_giro.linear.x = 0.70                        #key velocidade linear durante giro região base (m/s)
+                            msg_giro.angular.z = base_vel_angular * 2.4     #key velocidade angular giro região base (rad/s)
+                            tempo_giro = 5.0                                 #key tempo máximo (s)
+                            dist_giro = 1.0                                  #key distância máxima (m)
+                            x_ini = self.current_x
+                            y_ini = self.current_y
+                            t_ini = time.time()
+                            while True:
+                                self.cmd_vel_pub.publish(msg_giro)
+                                dist_percorrida = np.hypot(self.current_x - x_ini, self.current_y - y_ini)
+                                if dist_percorrida >= dist_giro or (time.time() - t_ini) >= tempo_giro:
+                                    break
+                                time.sleep(0.05)
+                            msg_giro.linear.x = 0.0
+                            msg_giro.angular.z = 0.0
+                            self.cmd_vel_pub.publish(msg_giro)
+                            self.get_logger().info(f"[REGIÃO BASE] Giro concluído. Iniciando tangenciamento.")
+                            self.contador_ciclos_nova_parede = 0
+                            self.parede_suprimida_rumo_solo_azul = False
+                            self.estado_atual = Estados.APROXIMANDO_PAREDE
+                            #-----------------------------
+                        else:
+                            secs_restantes = self.tempo_delay_parede_regiao_base - (time.time() - self.tempo_entrada_regiao_base_retorno)
+                            self.get_logger().info(f"[REGIÃO BASE] Parede detectada mas delay ativo ({secs_restantes:.1f}s restantes). Aguardando base...")
+                            twist.linear.x = base_vel_linear * 0.4
+                            twist.angular.z = 0.0
+
+                    else:
+                        # Nenhum elemento visível: avança em linha reta dentro da região
+                        self.get_logger().info("[REGIÃO BASE] Dentro da região. Avançando à procura da base ou parede...")
+                        twist.linear.x = base_vel_linear * 0.6
+                        twist.angular.z = 0.0
+
                 else:
-                    twist.angular.z = base_vel_angular * (direcao_regiao if not regiao_centralizada else 0)
-                twist.linear.x = base_vel_linear
+                    # Arena Cilindros: comportamento simples idêntico ao arquivo de referência —
+                    # dentro da região avança em linha reta procurando a base. Sem tangenciamento,
+                    # sem delay, sem ja_entrou_regiao_base (os cilindros têm o mesmo RGB da parede).
+                    self.get_logger().info("Dentro da região da base. Avançando em linha reta...")
+                    twist.linear.x = base_vel_linear
+                    twist.angular.z = 0.0
 
             else:
-                self.get_logger().info("Sem referência visual da base. Explorando aleatoriamente...")
-                twist.linear.x = base_vel_linear
-                twist.angular.z = base_vel_angular * self.direcao_aleatoria * 0.3
+                if self.arena_identificada == 'PAREDES':
+                    # Arena Paredes: se perdeu a base mas tinha estado salvo de tangenciamento, retoma
+                    if (self.estado_salvo_pre_base is not None
+                            and not self.base_a_frente
+                            and not self.regiao_base_a_frente):
+                        self.get_logger().info(f"[RETORNO] Base perdida. Retomando {self.estado_salvo_pre_base.name}.")
+                        self.estado_atual = self.estado_salvo_pre_base
+                        self.estado_salvo_pre_base = None
+                    # Hierarquia: 1º base (já tratada acima) 2º área base 3º parede 4º aleatório
+                    elif self.regiao_base_a_frente:
+                        self.get_logger().info("[RETORNO] Área base detectada! Centralizando e navegando para ela.")
+                        dx_reg = 15  #key margem em pixels para considerar área base centralizada
+                        regiao_centralizada = (
+                            self.pos_x_regiao_camera <= self.centro_x_camera + dx_reg and
+                            self.pos_x_regiao_camera >= self.centro_x_camera - dx_reg
+                        )
+                        direcao_regiao = 1 if self.pos_x_regiao_camera < self.centro_x_camera - dx_reg else -1
+                        if (direcao_regiao == Direcoes.ESQUERDA.value and self.obstaculo_a_esquerda) or \
+                           (direcao_regiao == Direcoes.DIREITA.value and self.obstaculo_a_direita):
+                            twist.angular.z = base_vel_angular * 0.50 * (direcao_regiao if not regiao_centralizada else 0)
+                        else:
+                            twist.angular.z = base_vel_angular * (direcao_regiao if not regiao_centralizada else 0)
+                        twist.linear.x = base_vel_linear * 0.7
+                    elif (self.obstaculo_a_frente or self.parede_a_frente) and self.arena_identificada == 'PAREDES':
+                        # 3º — parede visível: inicia protocolo completo de tangenciamento
+                        # EXCLUSIVO Arena Paredes: na Arena Cilindros o robô nunca tangencia no retorno
+                        self.get_logger().info("[RETORNO] Parede detectada! Iniciando protocolo de tangenciamento.")
+                        self.contador_ciclos_nova_parede = 0
+                        self.parede_suprimida_rumo_solo_azul = True
+                        self.estado_atual = Estados.APROXIMANDO_PAREDE
+                    else:
+                        # 4º — nada visível: navega aleatoriamente
+                        self.get_logger().info("[RETORNO] Sem referência visual. Navegando aleatoriamente...")
+                        twist.linear.x = base_vel_linear
+                        twist.angular.z = base_vel_angular * self.direcao_aleatoria * 0.3
+                else:
+                    # Arena Cilindros: comportamento idêntico ao arquivo de referência —
+                    # sem estado_salvo_pre_base, sem tangenciamento. Hierarquia simples:
+                    # área base → avança; nada visível → exploração aleatória.
+                    if self.regiao_base_a_frente:
+                        regiao_centralizada = (
+                            self.pos_x_regiao_camera <= self.centro_x_camera + dx and
+                            self.pos_x_regiao_camera >= self.centro_x_camera - dx
+                        )
+                        direcao_regiao = 1 if self.pos_x_regiao_camera < self.centro_x_camera - dx else -1
+                        self.get_logger().info("Região da base visível. Navegando para a região...")
+                        if (direcao_regiao == Direcoes.ESQUERDA.value and self.obstaculo_a_esquerda) or \
+                           (direcao_regiao == Direcoes.DIREITA.value and self.obstaculo_a_direita):
+                            twist.angular.z = base_vel_angular * 0.50 * (direcao_regiao if not regiao_centralizada else 0)
+                        else:
+                            twist.angular.z = base_vel_angular * (direcao_regiao if not regiao_centralizada else 0)
+                        twist.linear.x = base_vel_linear
+                    else:
+                        self.get_logger().info("Sem referência visual da base. Explorando aleatoriamente...")
+                        twist.linear.x = base_vel_linear
+                        twist.angular.z = base_vel_angular * self.direcao_aleatoria * 0.3
 
         ## POSICIONANDO PARA DEPÓSITO
         elif self.estado_atual == Estados.POSICIONANDO_PARA_DEPOSITO:
@@ -1485,7 +1892,7 @@ class ControleRobo(Node):
                 self.direcao_centralizacao_anterior_base = direcao_atual_base
 
                 if self.contador_oscilacao_centralizacao_base >= 5:
-                    self.get_logger().info("Oscilação excessiva na centralização com a base! Prosseguindo para o depósito mesmo assim.")
+                    self.get_logger().info("Oscilação excessiva na centralização com a base! Depositando a Bandeira agora!")
                     self.contador_oscilacao_centralizacao_base = 0
                     self.contador_desvios_centralizacao_deposito = 0
                     self.get_logger().info("Base alcançada! Avançando os 0.51m finais antes de depositar...")
@@ -1513,14 +1920,23 @@ class ControleRobo(Node):
                 self.direcao_desvio_anterior = None
                 self.estado_atual = Estados.DESVIANDO_DE_OBSTACULO
             else:
+                # Arma o timer na primeira vez
+                if self.tempo_inicio_avanco_deposito == 0.0:
+                    self.tempo_inicio_avanco_deposito = time.time()
+
                 distancia_avancada_deposito = np.hypot(self.current_x - self.x_ini_avanco_deposito, self.current_y - self.y_ini_avanco_deposito)
-                if distancia_avancada_deposito >= distancia_alvo_avanco_deposito:
+                tempo_avancando_deposito = time.time() - self.tempo_inicio_avanco_deposito
+                concluido_por_odometria = distancia_avancada_deposito >= distancia_alvo_avanco_deposito
+                concluido_por_tempo = tempo_avancando_deposito >= self.tempo_max_avanco_deposito
+
+                if concluido_por_odometria or concluido_por_tempo:
                     twist.linear.x = 0.0
                     twist.angular.z = 0.0
-                    if self.avanco_deposito_reduzido:
-                        self.get_logger().info("Avanço reduzido de 0.11m concluído (centralização cancelada por desvios). Preparando garra para depósito...")
+                    self.tempo_inicio_avanco_deposito = 0.0  # reseta para próximo uso
+                    if concluido_por_tempo and not concluido_por_odometria:
+                        self.get_logger().info(f"Avanço para depósito concluído por TEMPO ({tempo_avancando_deposito:.1f}s). Preparando garra...")
                     else:
-                        self.get_logger().info("Avanço final de 0.51m concluído. Preparando garra para depósito...")
+                        self.get_logger().info(f"Avanço para depósito concluído por ODOMETRIA ({distancia_avancada_deposito:.2f}m). Preparando garra...")
                     self.estado_atual = Estados.RESETANDO_GARRA_BASE
                 else:
                     twist.linear.x = 0.25
@@ -1572,10 +1988,10 @@ class ControleRobo(Node):
                 minutes_t = int((tempo_total % 3600) // 60)
                 seconds_t = int(tempo_total % 60)
 
-                self.get_logger().info(f"🎉 MISSÃO CONCLUÍDA COM SUCESSO!")
-                self.get_logger().info(f"⏱️ Tempo até captura da bandeira: {int(tempo_captura//60)}m {int(tempo_captura%60)}s")
-                self.get_logger().info(f"⏱️ Tempo de retorno após captura: {int(tempo_retorno//60)}m {int(tempo_retorno%60)}s")
-                self.get_logger().info(f"⏱️ Tempo total da simulação: {hours_t:02d}h {minutes_t:02d}m {seconds_t:02d}s")
+                self.get_logger().info(f"--- MISSÃO CONCLUÍDA COM SUCESSO! ---")
+                self.get_logger().info(f" >>> Tempo até captura da bandeira: {int(tempo_captura//60)}m {int(tempo_captura%60)}s")
+                #self.get_logger().info(f" >>> Tempo de retorno após captura: {int(tempo_retorno//60)}m {int(tempo_retorno%60)}s")
+                self.get_logger().warn(f" >>> Tempo total da simulação: {hours_t:02d}h {minutes_t:02d}m {seconds_t:02d}s")
                 self.get_logger().info("Desafio de Captura, Retorno Otimizado e Depósito Concluído com Sucesso!")
                 self.timer.cancel()
 

@@ -218,7 +218,7 @@
         <label>25</label>
       </plugin>
       <link name="blue_flag_link">
-        <pose>7.0 1.0 0.2 0 0 1.57</pose>
+        <pose>8.0 0.0 0.2 0 0 1.57</pose>
         <!-- Mastro -->
         <visual name="pole_visual">
           <pose>0 0 0.2 0 0 0</pose>
