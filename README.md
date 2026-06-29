@@ -77,43 +77,122 @@ Arquivos para apresentação na feira de extensão:
 - João Pedro Lopes de Melo - nUSP 15588950 - [@jp-lopes](https://github.com/jp-lopes)
 
 
-## Instruções para execução localmente
+# 🚀 Pegador de Bandeiras - ROS 2 + Gazebo
 
-1. Acessar a pasta `src` do seu workspace ROS2 Humble e clonar o repositório:
-    ```bash 
-    cd ~/ros2_ws/src
-    git clone -b pegador_de_bandeiras_mk1 https://github.com/jp-lopes/pegador_de_bandeiras.git pegador_de_bandeiras_mk1
-    ```
-2. Instalar dependências com `rosdep`:
-    ```bash 
-    cd ~/ros2_ws
-    sudo apt update
-    sudo rosdep init        
-    rosdep update
-    rosdep install --from-paths src --ignore-src -r -y
-    ```
-3. Compilar o pacote:
-    ```bash 
-    cd ~/ros2_ws
-    colcon build
-    ```
-4. Iniciar a simulação do Gazebo:
-    ```bash 
-    source install/setup.bash
-    ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
-    ```
-5. Abrir mais dois terminais:
-- No primeiro, carregar o robô na simulação:
-    ```bash 
-    cd ~/ros2_ws
-    source install/setup.bash
-    ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
-    ```
-- No segundo, iniciar o controle autonômo do robô:
-    ```bash 
-    cd ~/ros2_ws
-    source install/setup.bash
-    ros2 run pegador_de_bandeiras_mk1 controle_robo
+Projeto desenvolvido para a disciplina de Programação de Robôs Móveis, utilizando ROS 2 e Gazebo para simulação de robô autônomo em ambiente com arenas e obstáculos.
+
+A versão final do projeto está disponível na branch:
+
+👉 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1/tree/pegador_de_bandeiras_final
+
+---
+
+# 📦 1. Criar workspace ROS 2
+
+Antes de clonar o projeto, crie um workspace limpo:
+
+```bash id="mk1"
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws/src
+```
+
+---
+
+# 📥 2. Clonar o repositório
+
+```bash id="mk2"
+git clone -b pegador_de_bandeiras_final https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1.git
+```
+
+---
+
+# 🔧 3. Instalar dependências
+
+```bash id="mk3"
+cd ~/ros2_ws
+sudo apt update
+rosdep install --from-paths src --ignore-src -r -y
+```
+
+---
+
+# ⚙️ 4. Compilar o workspace
+
+```bash id="mk4"
+colcon build --symlink-install
+```
+
+---
+
+# 🧠 5. Carregar ambiente ROS 2
+
+```bash id="mk5"
+source install/setup.bash
+```
+
+---
+
+# 🚀 6. Iniciar simulação (Gazebo)
+
+```bash id="mk6"
+ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
+```
+
+---
+
+# 🤖 7. Execução do robô (2 terminais)
+
+## Terminal 1 — Carregar robô
+
+```bash id="mk7"
+cd ~/ros2_ws
+source install/setup.bash
+ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
+```
+
+## Terminal 2 — Controle autônomo
+
+```bash id="mk8"
+cd ~/ros2_ws
+source install/setup.bash
+ros2 run pegador_de_bandeiras_mk1 controle_robo
+```
+
+---
+
+# 🧪 Observações
+
+* Projeto testado em ROS 2 Humble
+* Simulação executada no Gazebo
+* Navegação autônoma em ambiente com obstáculos e objetivos
+* Arquitetura baseada em nós ROS independentes
+
+---
+
+# 📁 Estrutura do pacote
+
+```text id="mk9"
+pegador_de_bandeiras_mk1/
+├── launch/
+├── world/
+├── urdf/
+├── pegador_de_bandeiras_mk1/
+├── models/
+├── rviz/
+├── package.xml
+├── setup.py
+└── README.md
+```
+
+---
+
+# ✅ Status final
+
+✔ Simulação funcional
+✔ Navegação autônoma
+✔ Controle do robô implementado
+✔ Execução validada em Gazebo
+
     ```
 ## Instruções para execução com Docker
 1. Acessar a pasta `src` do seu workspace ROS2 Humble e clonar o repositório:
