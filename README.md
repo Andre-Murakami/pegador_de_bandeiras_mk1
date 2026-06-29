@@ -193,7 +193,7 @@ Este projeto também pode ser executado utilizando Docker com ROS 2 Humble, gara
 
 ---
 
-# 📦 1. Clonar o repositório
+# 1. Clonar o repositório
 
 Acesse a pasta `src` do workspace e clone a branch final:
 
@@ -204,7 +204,7 @@ git clone -b pegador_de_bandeiras_final https://github.com/Andre-Murakami/pegado
 
 ---
 
-# 🐳 2. Iniciar container Docker
+# 2. Iniciar container Docker
 
 Entre na pasta do Docker e libere acesso gráfico:
 
@@ -218,7 +218,7 @@ docker compose up -d
 
 ---
 
-# ⚙️ 3. Entrar no container e compilar
+# 3. Entrar no container e compilar
 
 ```bash id="d3"
 docker exec -it ros2_humble_env bash
@@ -229,7 +229,7 @@ source ~/.bashrc
 
 ---
 
-# 🚀 4. Iniciar simulação
+# 4. Iniciar simulação
 
 ```bash id="d4"
 ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
@@ -237,7 +237,7 @@ ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
 
 ---
 
-# 🤖 5. Execução do sistema (2 terminais adicionais)
+# 5. Execução do sistema (2 terminais adicionais)
 
 ## Terminal 1 — Carregar robô na simulação
 
@@ -257,7 +257,7 @@ ros2 run pegador_de_bandeiras_mk1 controle_robo
 
 ---
 
-# 🧪 Observações
+# Observações
 
 * Ambiente baseado em ROS 2 Humble
 * Execução isolada via Docker
@@ -266,18 +266,13 @@ ros2 run pegador_de_bandeiras_mk1 controle_robo
 
 ---
 
-# ⚠️ Requisitos
+# Requisitos
 
 * Docker instalado
 * Docker Compose habilitado
 * Suporte a interface gráfica (X11)
 * Permissão para execução do `xhost`
 
----
 
-# ✅ Status
 
-✔ Simulação funcional
-✔ Execução em ambiente Docker
-✔ Controle autônomo implementado
 
