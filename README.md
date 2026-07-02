@@ -1,278 +1,288 @@
+# Pegador de Bandeiras — ROS 2 (Trabalho 2)
 
-# pegador_de_bandeiras
+**SSC0712 - Programação de Robôs Móveis - ICMC/USP**
 
-*Projeto da disciplina SSC0712 - Programação de Robôs Móveis (ICMC / USP) *
+Sistema Completo de Captura da Bandeira (ROS 2) — Prof. Dr. Matheus Machado dos Santos
 
-Este projeto implementa um robô móvel autônomo capaz de operar em um ambiente simulado no Gazebo utilizando ROS 2. O robô é responsável por localizar uma bandeira azul em uma arena contendo obstáculos, realizar sua captura utilizando uma garra robótica e posteriormente retornar até a base para efetuar o depósito da bandeira.
-A navegação é baseada em fusão de informações provenientes de sensores LiDAR, câmera RGB e odometria, sendo toda a lógica de comportamento estruturada por meio de uma Máquina de Estados Finitos (FSM) que se adapta automaticamente a dois cenários distintos de desafios: a Arena Cilindros (obstáculos esparsos) e a Arena Paredes (labirintos e estruturas lineares).
+Projeto de robô autônomo simulado em Gazebo que navega por uma arena, localiza uma bandeira azul via visão computacional (câmera semântica), realiza a captura com um manipulador (garra), e retorna à base para depositá-la dentro da área demarcada.
 
-Funcionalidades Implementadas
-- Identificação Automática do Tipo de Arena: Detecção computacional inicial por visão para classificar o cenário operacional.
-- Navegação e Tangenciamento de Labirintos: Algoritmo dedicado para contorno de paredes na Arena Paredes.
-- Exploração Autônoma e Delimitação Visual: Rastreamento de zonas de solo colorido para refinamento de busca.
-- Desvio Dinâmico de Obstáculos: Sistema adaptativo anticolisão baseado em LiDAR e janelas de severidade angular.
-- Manipulação Robótica Assíncrona: Controle não-bloqueante da garra para captura e liberação do mastro da bandeira.
-- Estratégias Avançadas de Evasão e Recuperação: Mitigação de oscilações, quinas e travamentos físicos.
-
-Máquina de Estados (FSM)
-A inteligência de tomada de decisão é organizada sob uma FSM dividida em fases lógicas compartilhadas e específicas por ambiente:
-1. Inicialização e Classificação
-IDENTIFICANDO_ARENA: Estado inicial de calibração ativa. O robô avalia a proporção da malha estrutural na câmera. Se a ocupação visual ultrapassar o limiar de 30%, o robô chaveia para a lógica de Paredes; caso contrário, assume o cenário de Cilindros.
-2. Comportamentos Específicos (Arena Paredes)
-APROXIMANDO_PAREDE: O robô avança até detectar uma parede estrutural através do LiDAR frontal dentro do raio de segurança (0.67 m), definindo por proximidade angular o lado ideal de tangenciamento.
-GIRANDO_PARALELO_PAREDE: Executa uma rotação precisa de 90º no eixo oposto ao obstáculo linear detectado.
-SEGUINDO_PAREDE: Navegação tangente paralela à parede. O robô utiliza controle proporcional para manter a distância lateral restrita entre 0.60 m (self.distancia_minima_seguindo_parede) e 0.67 m. Caso perca a referência, inicia o protocolo de busca ativa de quinas.
-AP_AVANCO_PRE_GIRO_NOVA_PAREDE: Micro-avanço temporizado para ultrapassar a quina antes de iniciar curvas fechadas.
-GIRANDO_90_NOVA_PAREDE & AVANCANDO_FIXO_NOVA_PAREDE: Loop sequencial em dois ciclos (65º e 42.5º) para mapear e dobrar quinas sem colisão traseira.
-3. Exploração, Busca e Captura (Comum / Arena Cilindros)
-EXPLORANDO: Estado padrão de busca livre em linha reta por assinaturas visuais do alvo.
-NAVEGANDO_PARA_AREA_SOLO_AZUL: Direciona o robô ao quadrante da bandeira ao identificar a zona azul por segmentação de cor.
-PERMANECENDO_AREA_SOLO_AZUL & GIRANDO_180_AREA_SOLO_AZUL: Protocolos de confinamento e varreduras angulares de até 700º para localização rápida do mastro da bandeira.
-NAVEGANDO_PARA_BANDEIRA: Alinhamento angular proporcional via câmera acoplado à velocidade linear adaptativa.
-POSICIONANDO_PARA_COLETA: Ajuste milimétrico final a exatos 0.67 m do mastro utilizando dados centralizados do LiDAR.
-CAPTURANDO_BANDEIRA: Automação sequencial controlada por registradores de ciclos (abertura de dedos, extensão mecânica, acoplamento, retração e elevação para tráfego seguro).
-4. Retorno e Depósito
-RETORNANDO_PARA_BASE: Rastreamento da zona verde. Ativa o mascaramento do LiDAR (Zona Cega Frontal entre -15º e +15º) para evitar que o robô tente desviar da bandeira que está transportando.
-POSICIONANDO_PARA_DEPOSITO: Alinhamento axial com o centro da base receptora. Possui travas de limite de oscilação.
-AVANCANDO_PARA_DEPOSITO: Avanço linear curto controlado por odometria (0.51 m ou 0.11 m).
-RESETANDO_GARRA_BASE & SOLTANDO_BANDEIRA: Alinhamento angular final do atuador e abertura controlada da garra para liberação estável da carga.
-5. Manobras de Emergência e Evasão
-DESVIANDO_DE_OBSTACULO: Desvio reativo padrão baseado no menor vetor de distância lido pelo LiDAR.
-RE_PRE_DESVIO: Acionado em proximidades críticas (<= 0.4 m). Força uma marcha à ré linear de afastamento rápido.
-DESVIANDO_DE_OBSTACULO_2: Protocolo colisao acionado após 5 oscilações redundantes. Alterna entre curvas senoidais inversas e giros forçados de 100º para liberar o robô de quinas e pontos cegos.
-Fluxo Geral de Operação
-
-Tecnologias Utilizadas
-1. ROS 2 (Humble)
-2. Gazebo (Simulação Física e de Ambientes)
-3. Python 3 / OpenCV (Filtragem HSVs e Processamento de Contornos de Cor)
-4. NumPy & SciPy (Tratamento de Matrizes de Odometria e Quaterniões Eulerianos)
-5. LiDAR Scan Msgs (Sensoriamento de Proximidade Bidirecional)
-
-Estrutura Geral do Sistema
-- O arquivo principal controle_robo.py centraliza a inteligência do agente, dividindo-se internamente em:
-- Módulo de Percepção: Callbacks assíncronos de LiDAR (/scan), Câmera (/camera/image_raw) e Odometria (/odom).
-- Filtragem de Ruído de Leitura: Métodos dinâmicos para mascarar dados espúrios e desconsiderar a carga frontal durante o retorno.
-- Controle Cinemático Diferencial: Gerador dinâmico de velocidades lineares e angulares publicado em /cmd_vel com amortecimento adaptativo (self.fator_velocidade_arena_paredes = 0.5).
-
-Estrutura Geral do Sistema
-- O sistema é organizado em módulos responsáveis por:
-- Percepção (LiDAR, câmera e odometria);
-- Tomada de decisão baseada em estados;
-- Controle de movimento diferencial;
-- Controle da garra robótica;
-- Navegação e recuperação de falhas.
-- Essa arquitetura permite que o robô execute missões completas de busca, captura e transporte de objetos de forma totalmente autônoma em ambiente simulado.
-
-Diagrama de Estados:
-![Diagrama de Estados](https://github.com/jp-lopes/pegador_de_bandeiras/blob/pegador_de_bandeiras_mk1/Diagrama_de_estados.png)
-
-Arquivos para apresentação na feira de extensão:
-- [pôster](https://docs.google.com/presentation/d/1d3UxarLUDG2wu3aqnuSmSDFOD7z9jMMMoiP7K6U-u2s/edit?slide=id.p#slide=id.p)
-- [slides](https://drive.google.com/file/d/1fvQyAbL2nSSsEmluT0DadpGj-qvy-iIv/view?usp=sharing)
+Este README documenta a versão **em grupo** do projeto (`controle_robo.py`), continuação do Trabalho 1.
 
 ## Autores
+
 - Andre Luiz de Souza Murakami - nUSP 5631500 - [@Andre-Murakami](https://github.com/Andre-Murakami)
 - Caio Cesar Trentin de Assis - nUSP 15674233 - [@CaioCesarTA](https://github.com/CaioCesarTA)
 - João Pedro Lopes de Melo - nUSP 15588950 - [@jp-lopes](https://github.com/jp-lopes)
 
+---
 
-# 🚀 Pegador de Bandeiras - ROS 2 + Gazebo
+## 📑 Sumário
 
-Projeto desenvolvido para a disciplina de Programação de Robôs Móveis, utilizando ROS 2 e Gazebo para simulação de robô autônomo em ambiente com arenas e obstáculos.
-
-A versão final do projeto está disponível na branch:
-
-👉 https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1/tree/pegador_de_bandeiras_final
+- [Autores](#autores)
+- [Execução Local (ROS 2 Humble)](#-execução-local-ros-2-humble)
+- [Diagrama da Máquina de Estados](#-diagrama-da-máquina-de-estados)
+- [Estrutura do Projeto](#-estrutura-do-projeto)
+- [Visão Geral do Controlador (`controle_robo.py`)](#-visão-geral-do-controlador-controle_robopy)
+- [Sobre este Repositório](#-sobre-este-repositório)
+- [Critérios de Avaliação](#critérios-de-avaliação-referência-do-enunciado)
+- [Dúvidas](#dúvidas)
 
 ---
 
-# 📦 1. Criar workspace ROS 2
+## 🚀 Execução Local (ROS 2 Humble)
 
-Antes de clonar o projeto, crie um workspace limpo:
+### Pré-requisitos
 
-```bash id="mk1"
+Antes de executar o projeto, é necessário ter instalado:
+
+- Ubuntu 22.04;
+- ROS 2 Humble;
+- Gazebo;
+- Colcon;
+- Git.
+
+> **Observação:** Se esta for a primeira vez que você utiliza o ROS 2 nesta máquina, inicialize o `rosdep` apenas uma vez:
+> ```bash
+> sudo rosdep init
+> rosdep update
+> ```
+
+### 1. Criar um workspace do ROS 2
+
+```bash
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 ```
 
----
+### 2. Clonar o repositório
 
-# 📥 2. Clonar o repositório
-
-```bash id="mk2"
+```bash
 git clone -b pegador_de_bandeiras_final https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1.git
 ```
 
----
+### 3. Instalar as dependências do projeto
 
-# 🔧 3. Instalar dependências
+> Execute este passo apenas se esta for a primeira vez que o projeto é utilizado na máquina ou caso alguma dependência ainda não esteja instalada.
 
-```bash id="mk3"
+```bash
 cd ~/ros2_ws
-sudo apt update
 rosdep install --from-paths src --ignore-src -r -y
 ```
 
----
+### 4. Compilar o workspace
 
-# ⚙️ 4. Compilar o workspace
-
-```bash id="mk4"
-colcon build --symlink-install
+```bash
+cd ~/ros2_ws
+colcon build
 ```
 
----
+### 5. Carregar o ambiente do ROS 2
 
-# 🧠 5. Carregar ambiente ROS 2
+Em todo novo terminal utilizado para executar o projeto, carregue o ambiente do workspace:
 
-```bash id="mk5"
+```bash
+cd ~/ros2_ws
 source install/setup.bash
 ```
 
----
+### 6. Executar a simulação
 
-# 🚀 6. Iniciar simulação (Gazebo)
+Abra **três terminais**.
 
-```bash id="mk6"
+#### Terminal 1 — Iniciar o Gazebo
+
+```bash
+cd ~/ros2_ws
+source install/setup.bash
 ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
 ```
 
----
+> **Cenários disponíveis**
+>
+> Os 3 cenários disponíveis são:
+>
+> - `arena_cilindros.sdf` (padrão)
+> - `empty_arena.sdf`
+> - `arena_paredes.sdf`
+>
+> Para escolher um cenário diferente do padrão, informe o parâmetro `world` ao executar o launch:
+> ```bash
+> ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py world:=empty_arena.sdf
+> ```
+> ou
+> ```bash
+> ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py world:=arena_paredes.sdf
+> ```
+> Se o parâmetro `world` não for informado, o cenário `arena_cilindros.sdf` (padrão) é iniciado.
 
-# 🤖 7. Execução do robô (2 terminais)
 
-## Terminal 1 — Carregar robô
+#### Terminal 2 — Inserir o robô na simulação
 
-```bash id="mk7"
+```bash
 cd ~/ros2_ws
 source install/setup.bash
 ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
 ```
 
-## Terminal 2 — Controle autônomo
+#### Terminal 3 — Executar o controlador do robô (versão em grupo)
 
-```bash id="mk8"
+```bash
 cd ~/ros2_ws
 source install/setup.bash
 ros2 run pegador_de_bandeiras_mk1 controle_robo
 ```
 
----
-
-# 🧪 Observações
-
-* Projeto testado em ROS 2 Humble
-* Simulação executada no Gazebo
-* Navegação autônoma em ambiente com obstáculos e objetivos
-* Arquitetura baseada em nós ROS independentes
 
 ---
+ 
+## 🗺️ Diagrama da Máquina de Estados
 
-# 📁 Estrutura do pacote
+```mermaid
+flowchart TB
 
-```text id="mk9"
+    START([🚀 Início])
+
+    START --> IDENT["🔍 Identificar Arena"]
+
+    IDENT -->|Arena Cilindros| CIL
+    IDENT -->|Arena Paredes| PAR
+
+%%==================================================
+%% Arena Cilindros
+%%==================================================
+
+subgraph CIL["🟢 Arena Cilindros"]
+
+direction TB
+
+C1["Explorando"]
+C2["Navegando para Área Azul"]
+C3["Explorando Área Azul"]
+C4["Bandeira Detectada"]
+C5["Posicionando"]
+C6["Capturando"]
+
+C1 --> C2
+C2 --> C3
+C3 --> C4
+C4 --> C5
+C5 --> C6
+
+OBS1{{Obstáculo}}
+
+C4 --> OBS1
+OBS1 -->|"Desvio"| C4
+
+end
+
+%%==================================================
+%% Arena Paredes
+%%==================================================
+
+subgraph PAR["🔵 Arena Paredes"]
+
+direction TB
+
+P1["Aproxima Parede"]
+P2["Segue Parede"]
+P3["Busca Bandeira"]
+P4["Posiciona"]
+P5["Captura"]
+
+P1 --> P2
+P2 --> P3
+P3 --> P4
+P4 --> P5
+
+PERDE{{Perdeu Parede}}
+
+P2 --> PERDE
+PERDE --> P2
+
+end
+
+%%==================================================
+%% RETORNO
+%%==================================================
+
+subgraph RET["🟡 Retorno"]
+
+direction LR
+
+R1["Retorna Base"]
+R2["Posiciona"]
+R3["Deposita"]
+R4["Fim"]
+
+R1 --> R2 --> R3 --> R4
+
+end
+
+C6 --> R1
+P5 --> R1
+
+style IDENT fill:#FFF4CE,stroke:#555,stroke-width:2px
+
+style CIL fill:#EAF8EA
+style PAR fill:#EAF2FF
+style RET fill:#FFF8DC
+```
+
+
+
+---
+
+## 📂 Estrutura do Projeto
+
+```
 pegador_de_bandeiras_mk1/
+├── config/
+├── description/
+├── docker/
 ├── launch/
-├── world/
-├── urdf/
-├── pegador_de_bandeiras_mk1/
 ├── models/
+├── pegador_de_bandeiras_mk1/       # Código-fonte Python do pacote
+│   ├── controle_robo.py            # Controlador principal (versão em grupo)
+│   ├── debug_cor_camera.py         # Script de depuração da câmera semântica
+│   ├── ground_truth_odometry.py
+│   ├── robo_mapper.py
+│   └── __init__.py
+├── resource/
 ├── rviz/
-├── package.xml
 ├── setup.py
+├── setup.cfg
+├── package.xml
+├── test/
+├── world/                          # Cenários (.sdf / .sdf.xacro) da arena
+├── Diagrama_de_estados.png         # Diagrama da máquina de estados
 └── README.md
 ```
 
----------------------------------
 
+## 🧠 Visão Geral do Controlador (`controle_robo.py`)
 
-# 🐳 Instruções para Execução com Docker - Pegador de Bandeiras
+O robô é controlado por uma **máquina de estados finitos** implementada em Python (nó ROS 2 `controle_robo`), que evolui desde a exploração da arena até a captura da bandeira, retorno e depósito na base.
 
-Este projeto também pode ser executado utilizando Docker com ROS 2 Humble, garantindo ambiente padronizado e reprodutível.
+### Tópicos utilizados
 
----
+| Tópico | Tipo | Uso |
+|---|---|---|
+| `/cmd_vel` | `geometry_msgs/Twist` | Comando de velocidade do robô |
+| `/gripper_controller/commands` | `std_msgs/Float64MultiArray` | Controle da garra (elevação + abertura dos dedos) |
+| `/scan` | `sensor_msgs/LaserScan` | LiDAR — detecção de obstáculos e distância à bandeira |
+| `/imu` | `sensor_msgs/Imu` | Detecção de capotamento |
+| `/odom_gt` | `nav_msgs/Odometry` | Odometria (posição e orientação) |
+| `/robot_cam/colored_map` | `sensor_msgs/Image` | Câmera semântica — detecção de bandeira, cilindro, parede e base |
 
-# 1. Clonar o repositório
+### Principais estados da máquina
 
-Acesse a pasta `src` do workspace e clone a branch final:
+- **Exploração e navegação:** `EXPLORANDO`, `NAVEGANDO_PARA_BANDEIRA`, `IDENTIFICANDO_ARENA`
+- **Desvio de obstáculos:** `DESVIANDO_DE_OBSTACULO`, `DESVIANDO_DE_OBSTACULO_2`, `RE_PRE_DESVIO`
+- **Seguimento de parede (Arena Paredes):** `APROXIMANDO_PAREDE`, `GIRANDO_PARALELO_PAREDE`, `SEGUINDO_PAREDE`, `GIRANDO_90_NOVA_PAREDE`, `AVANCANDO_FIXO_NOVA_PAREDE`, `AP_AVANCO_PRE_GIRO_NOVA_PAREDE`
+- **Captura da bandeira:** `POSICIONANDO_PARA_COLETA`, `CAPTURANDO_BANDEIRA`
+- **Retorno à base:** `RETORNANDO_PARA_BASE`, `AP_RETORNO_ODOMETRIA` (retorno por odometria específico da Arena Paredes)
+- **Depósito da bandeira:** `POSICIONANDO_PARA_DEPOSITO`, `GIRANDO_360_RETORNO`, `AVANCANDO_PARA_DEPOSITO`, `RESETANDO_GARRA_BASE`, `SOLTANDO_BANDEIRA`
+- **Área de solo azul (arena com esse recurso):** `NAVEGANDO_PARA_AREA_SOLO_AZUL`, `PERMANECENDO_AREA_SOLO_AZUL`, `GIRANDO_180_AREA_SOLO_AZUL`
 
-```bash id="d1"
-cd ~/ros2_ws/src
-git clone -b pegador_de_bandeiras_final https://github.com/Andre-Murakami/pegador_de_bandeiras_mk1.git
-```
-
----
-
-# 2. Iniciar container Docker
-
-Entre na pasta do Docker e libere acesso gráfico:
-
-```bash id="d2"
-cd pegador_de_bandeiras_mk1/docker
-
-xhost +local:root
-
-docker compose up -d
-```
-
----
-
-# 3. Entrar no container e compilar
-
-```bash id="d3"
-docker exec -it ros2_humble_env bash
-
-colcon build
-source ~/.bashrc
-```
-
----
-
-# 4. Iniciar simulação
-
-```bash id="d4"
-ros2 launch pegador_de_bandeiras_mk1 inicia_simulacao.launch.py
-```
-
----
-
-# 5. Execução do sistema (2 terminais adicionais)
-
-## Terminal 1 — Carregar robô na simulação
-
-```bash id="d5"
-docker exec -it ros2_humble_env bash
-
-ros2 launch pegador_de_bandeiras_mk1 carrega_robo.launch.py
-```
-
-## Terminal 2 — Controle autônomo do robô
-
-```bash id="d6"
-docker exec -it ros2_humble_env bash
-
-ros2 run pegador_de_bandeiras_mk1 controle_robo
-```
-
----
-
-# Observações
-
-* Ambiente baseado em ROS 2 Humble
-* Execução isolada via Docker
-* Simulação completa com Gazebo
-* Sistema de controle autônomo do robô
-
----
-
-# Requisitos
-
-* Docker instalado
-* Docker Compose habilitado
-* Suporte a interface gráfica (X11)
-* Permissão para execução do `xhost`
-
-
-
+O código também mantém um **cronômetro de missão**, registrando o tempo até a captura da bandeira e o tempo total da simulação, exibidos no log ao final da execução.
 
